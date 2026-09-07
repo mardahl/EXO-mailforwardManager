@@ -6,6 +6,8 @@ $Script:ScriptDir  = Split-Path -Parent $MyInvocation.MyCommand.Path
 $Script:ConfigPath = Join-Path $Script:ScriptDir 'config.json'
 $Script:CachePath  = Join-Path $Script:ScriptDir 'cache.json'
 
+Add-Type -AssemblyName System.Windows.Forms, System.Drawing
+
 #region Config
 
 function Get-Config {
@@ -130,5 +132,179 @@ function Get-MailboxList {
     Save-MailboxCache -Mailboxes $list
     $list
 }
+
+#endregion
+
+#region Actions
+
+function Show-PreviewDialog {
+    param([Parameter(Mandatory)][array]$Rows)
+    [Windows.Forms.MessageBox]::Show('Preview not yet implemented') | Out-Null
+    $false
+}
+
+function Apply-Forwards {
+    param([Parameter(Mandatory)][array]$Rows)
+}
+
+#endregion
+
+#region UI
+
+function Show-MainForm {
+    param([Parameter(Mandatory)][array]$Mailboxes)
+
+    $form = New-Object Windows.Forms.Form -Property @{
+        Text='Mailbox Forwarding Tool'; Width=1100; Height=640; StartPosition='CenterScreen'
+    }
+
+    # Filter row
+    $search = New-Object Windows.Forms.TextBox -Property @{ Left=16; Top=14; Width=280 }
+    $rbAll  = New-Object Windows.Forms.RadioButton -Property @{ Text='All';          Left=312; Top=16; Width=60;  Checked=$true }
+    $rbHas  = New-Object Windows.Forms.RadioButton -Property @{ Text='Has forward';  Left=376; Top=16; Width=110 }
+    $rbNone = New-Object Windows.Forms.RadioButton -Property @{ Text='No forward';   Left=492; Top=16; Width=100 }
+    $btnRefresh  = New-Object Windows.Forms.Button -Property @{ Text='Refresh';  Left=860; Top=12; Width=80 }
+    $btnSettings = New-Object Windows.Forms.Button -Property @{ Text='Settings'; Left=948; Top=12; Width=80 }
+    $btnPreview  = New-Object Windows.Forms.Button -Property @{ Text='Preview →'; Left=948; Top=560; Width=140 }
+
+    $grid = New-Object Windows.Forms.DataGridView -Property @{
+        Left=16; Top=48; Width=1056; Height=500
+        AutoGenerateColumns=$false; AllowUserToAddRows=$false; SelectionMode='FullRowSelect'; MultiSelect=$true
+        EditMode='EditOnEnter'
+    }
+
+    [void]$grid.Columns.Add((New-Object Windows.Forms.DataGridViewTextBoxColumn -Property @{ Name='PrimarySmtpAddress'; HeaderText='Mailbox'; ReadOnly=$true; Width=240; DataPropertyName='PrimarySmtpAddress' }))
+    [void]$grid.Columns.Add((New-Object Windows.Forms.DataGridViewTextBoxColumn -Property @{ Name='CurrentForwarding'; HeaderText='Current forward'; ReadOnly=$true; Width=240; DataPropertyName='CurrentForwarding' }))
+    [void]$grid.Columns.Add((New-Object Windows.Forms.DataGridViewTextBoxColumn -Property @{ Name='HasOnPremForwarding'; HeaderText='On-prem?'; ReadOnly=$true; Width=70; DataPropertyName='HasOnPremForwarding' }))
+    [void]$grid.Columns.Add((New-Object Windows.Forms.DataGridViewCheckBoxColumn -Property @{ Name='DeliverAndStore'; HeaderText='Deliver+Store'; Width=90; DataPropertyName='DeliverAndStore' }))
+    [void]$grid.Columns.Add((New-Object Windows.Forms.DataGridViewTextBoxColumn -Property @{ Name='ForwardingPrefix'; HeaderText='Prefix'; Width=180; DataPropertyName='ForwardingPrefix' }))
+    [void]$grid.Columns.Add((New-Object Windows.Forms.DataGridViewTextBoxColumn -Property @{ Name='WillForwardTo'; HeaderText='Will forward to'; ReadOnly=$true; Width=240; DataPropertyName='WillForwardTo' }))
+
+    $form.Controls.AddRange(@($search,$rbAll,$rbHas,$rbNone,$btnRefresh,$btnSettings,$grid,$btnPreview))
+
+    # Build row view models
+    $rows = [System.ComponentModel.BindingList[object]]::new()
+    foreach ($m in $Mailboxes) {
+        $prefix = ($m.PrimarySmtpAddress -split '@')[0]
+        $willTo = if ($prefix) { "$prefix@$($Script:Config.ForwardingDomain)" } else { '' }
+        $rows.Add([pscustomobject]@{
+            PrimarySmtpAddress   = $m.PrimarySmtpAddress
+            CurrentForwarding    = $m.ForwardingSmtpAddress
+            HasOnPremForwarding  = if ($m.HasOnPremForwardingAddress) { 'yes' } else { '' }
+            DeliverAndStore      = [bool]$Script:Config.DeliverToMailboxAndForward
+            ForwardingPrefix     = $prefix
+            WillForwardTo        = $willTo
+            Selected             = $false
+        })
+    }
+    $grid.DataSource = $rows
+
+    # Recompute WillForwardTo when prefix edited
+    $grid.add_CellValueChanged({
+        param($s,$e)
+        if ($e.RowIndex -lt 0) { return }
+        $row = $rows[$e.RowIndex]
+        if ($grid.Columns[$e.ColumnIndex].Name -eq 'ForwardingPrefix') {
+            $row.WillForwardTo = if ($row.ForwardingPrefix) { "$($row.ForwardingPrefix)@$($Script:Config.ForwardingDomain)" } else { '' }
+            $grid.InvalidateRow($e.RowIndex)
+        }
+    })
+
+    # Filter logic
+    $applyFilter = {
+        $q = $search.Text
+        foreach ($r in $grid.Rows) {
+            if ($r.IsNewRow) { continue }
+            $item = $r.DataBoundItem
+            $matchQ = -not $q -or $item.PrimarySmtpAddress -like "*$q*"
+            $matchF = $true
+            if ($rbHas.Checked)  { $matchF = -not [string]::IsNullOrEmpty($item.CurrentForwarding) }
+            if ($rbNone.Checked) { $matchF = [string]::IsNullOrEmpty($item.CurrentForwarding) }
+            $r.Visible = ($matchQ -and $matchF)
+        }
+    }
+    $search.add_TextChanged($applyFilter)
+    $rbAll.add_CheckedChanged($applyFilter)
+    $rbHas.add_CheckedChanged($applyFilter)
+    $rbNone.add_CheckedChanged($applyFilter)
+
+    # Selection tracking: mark Selected on selected rows only at Preview time
+
+    $btnSettings.add_Click({
+        $new = Show-SettingsDialog -Config $Script:Config
+        if ($new) {
+            Save-Config $new
+            $Script:Config = $new
+            # Recompute WillForwardTo for all rows
+            foreach ($row in $rows) {
+                $row.WillForwardTo = if ($row.ForwardingPrefix) { "$($row.ForwardingPrefix)@$($Script:Config.ForwardingDomain)" } else { '' }
+            }
+            $grid.Refresh()
+        }
+    })
+
+    $btnRefresh.add_Click({
+        $form.Cursor = 'WaitCursor'
+        try {
+            $fresh = Get-MailboxList -Force
+            # update rows in-place so edits are kept where mailbox still exists
+            $byAddr = @{}
+            foreach ($m in $fresh) { $byAddr[$m.PrimarySmtpAddress] = $m }
+            foreach ($row in $rows) {
+                if ($byAddr.ContainsKey($row.PrimarySmtpAddress)) {
+                    $m = $byAddr[$row.PrimarySmtpAddress]
+                    $row.CurrentForwarding   = $m.ForwardingSmtpAddress
+                    $row.HasOnPremForwarding = if ($m.HasOnPremForwardingAddress) { 'yes' } else { '' }
+                }
+            }
+            $grid.Refresh()
+        } finally { $form.Cursor = 'Default' }
+    })
+
+    $btnPreview.add_Click({
+        $grid.EndEdit()
+        $sel = foreach ($r in $grid.SelectedRows) { $r.DataBoundItem }
+        if (-not $sel) { [Windows.Forms.MessageBox]::Show('Select at least one row.'); return }
+        $result = Show-PreviewDialog -Rows $sel
+        if ($result) {
+            Apply-Forwards -Rows $sel
+            # update row view with applied values
+            foreach ($row in $sel) {
+                $row.CurrentForwarding = $row.WillForwardTo
+            }
+            $grid.Refresh()
+        }
+    })
+
+    $form.Add_Shown({ $form.Activate() })
+    [void]$form.ShowDialog()
+    $null
+}
+
+#endregion
+
+#region Main
+
+function Main {
+    $Script:Config = Get-Config
+    if (-not $Script:Config) {
+        $Script:Config = Show-SettingsDialog
+        if (-not $Script:Config) { return }
+        Save-Config $Script:Config
+    }
+    if ($SelfTest) {
+        Connect-Exo
+        $list = Get-MailboxList -Force
+        Write-Host "Self-test OK. $($list.Count) mailboxes."
+        return
+    }
+    try { Connect-Exo } catch {
+        [Windows.Forms.MessageBox]::Show("Connect failed: $($_.Exception.Message)",'Error')
+        return
+    }
+    $mailboxes = Get-MailboxList
+    Show-MainForm -Mailboxes $mailboxes
+}
+Main
 
 #endregion
