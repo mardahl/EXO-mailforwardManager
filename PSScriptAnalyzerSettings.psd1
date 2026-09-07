@@ -4,6 +4,7 @@
         'PSAvoidUsingEmptyCatchBlock'
         'PSUseShouldProcessForStateChangingFunctions'
         'PSUseSingularNouns'
+        'PSReviewUnusedParameter'
     )
     Rules = @{
         PSUseCompatibleSyntax = @{
