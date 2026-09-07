@@ -441,7 +441,7 @@ function Show-MainForm {
             Justification = 'Event sender parameter required by .NET event signature.')]
         param($s,$e)
         if ($e.RowIndex -lt 0) { return }
-        $row = $rows[$e.RowIndex]
+        $row = $grid.Rows[$e.RowIndex].DataBoundItem
         if ($grid.Columns[$e.ColumnIndex].Name -eq 'ForwardingPrefix') {
             $row.WillForwardTo = if ($row.ForwardingPrefix) { "$($row.ForwardingPrefix)@$($Script:Config.ForwardingDomain)" } else { '' }
             $grid.InvalidateRow($e.RowIndex)
@@ -450,16 +450,20 @@ function Show-MainForm {
 
     # Filter logic
     $applyFilter = {
+        if (-not $grid.EndEdit()) { return }
         $q = $search.Text
-        foreach ($r in $grid.Rows) {
-            if ($r.IsNewRow) { continue }
-            $item = $r.DataBoundItem
+        $filtered = [System.ComponentModel.BindingList[object]]::new()
+        foreach ($item in $rows) {
             $matchQ = -not $q -or $item.PrimarySmtpAddress -like "*$q*"
             $matchF = $true
             if ($rbHas.Checked)  { $matchF = -not [string]::IsNullOrEmpty($item.CurrentForwarding) }
             if ($rbNone.Checked) { $matchF = [string]::IsNullOrEmpty($item.CurrentForwarding) }
-            $r.Visible = ($matchQ -and $matchF)
+            if ($matchQ -and $matchF) { $filtered.Add($item) }
         }
+        # Filter the binding, not row visibility: CurrencyManager owns the current row.
+        $grid.DataSource = $filtered
+        # Rebinding selects the first row automatically; Preview requires explicit selection.
+        $grid.ClearSelection()
     }
     $search.add_TextChanged($applyFilter)
     $rbAll.add_CheckedChanged($applyFilter)

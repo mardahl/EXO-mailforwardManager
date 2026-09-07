@@ -6,6 +6,17 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.0.9] - 2026-09-07
+
+- Fix: searching or switching All / Has forward / No forward no longer tries
+  to hide the current bound row, avoiding the WinForms CurrencyManager error.
+- Fix: prefix edits in filtered results update the correct mailbox. Unsaved
+  prefix and delivery-option edits are retained when filters change.
+- Change: changing filters clears row selection so rebinding does not select
+  a mailbox for Preview automatically.
+- Add: offline filtering regression checks and native WinForms checks in
+  Windows PowerShell 5.1 CI.
+
 ## [1.0.8] - 2026-09-07
 
 - Fix: mailbox retrieval stops on Exchange errors instead of reporting zero
@@ -129,7 +140,8 @@ Initial release.
   CHANGELOG - no source-repo bloat - and attaches it to the GitHub
   release with the matching changelog section as notes.
 
-[Unreleased]: https://github.com/mardahl/EXO-mailforwardManager/compare/v1.0.8...HEAD
+[Unreleased]: https://github.com/mardahl/EXO-mailforwardManager/compare/v1.0.9...HEAD
+[1.0.9]: https://github.com/mardahl/EXO-mailforwardManager/compare/v1.0.8...v1.0.9
 [1.0.8]: https://github.com/mardahl/EXO-mailforwardManager/compare/v1.0.7...v1.0.8
 [1.0.7]: https://github.com/mardahl/EXO-mailforwardManager/compare/v1.0.6...v1.0.7
 [1.0.6]: https://github.com/mardahl/EXO-mailforwardManager/compare/v1.0.5...v1.0.6

@@ -45,6 +45,9 @@ jobs:
       - name: Check mailbox loading
         shell: pwsh
         run: ./tests/MailboxLoading.Tests.ps1
+      - name: Check grid filtering logic
+        shell: pwsh
+        run: ./tests/GridFiltering.Tests.ps1
 
   windows-smoke:
     name: WinForms smoke (Windows)
@@ -67,3 +70,6 @@ jobs:
       - name: Check mailbox loading (PowerShell 5.1)
         shell: powershell
         run: ./tests/MailboxLoading.Tests.ps1
+      - name: Check grid filtering with WinForms (PowerShell 5.1)
+        shell: powershell
+        run: ./tests/GridFiltering.Tests.ps1
