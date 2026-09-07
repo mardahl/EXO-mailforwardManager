@@ -23,10 +23,17 @@ if ([Threading.Thread]::CurrentThread.GetApartmentState() -ne 'STA') {
 Add-Type -AssemblyName System.Windows.Forms, System.Drawing
 
 function Install-ExoModule {
-    # Zero-touch dependency: ensure ExchangeOnlineManagement (>= 3.x, MSAL/WAM)
-    # is installed for the current user and imported, without operator work.
-    if (-not (Get-Module -ListAvailable -Name ExchangeOnlineManagement)) {
-        Write-Host 'ExchangeOnlineManagement module not found; installing for current user...'
+    # Zero-touch dependency: ExchangeOnlineManagement >= 3.7.2 required.
+    # 3.7.0 integrated WAM (Web Account Manager) broker auth; 3.7.2 added the
+    # -DisableWAM fallback switch. Older versions fall back to the legacy MSAL
+    # embedded browser, which hosts a COM ActiveX control and is the source of
+    # the "ActiveX control 8856f961-... cannot be instantiated" failures.
+    # https://learn.microsoft.com/powershell/exchange/exchange-online-powershell-v2
+    $minVersion = [version]'3.7.2'
+    $installed = Get-Module -ListAvailable -Name ExchangeOnlineManagement |
+        Sort-Object Version -Descending | Select-Object -First 1
+    if (-not $installed -or $installed.Version -lt $minVersion) {
+        Write-Host "ExchangeOnlineManagement >= $minVersion required (found: $($installed.Version)); installing/updating for current user..."
         $nuget = Get-PackageProvider -Name NuGet -ErrorAction SilentlyContinue
         if (-not $nuget -or $nuget.Version -lt [version]'2.8.5.201') {
             Install-PackageProvider -Name NuGet -MinimumVersion 2.8.5.201 -Scope CurrentUser -Force | Out-Null
@@ -34,9 +41,13 @@ function Install-ExoModule {
         if ((Get-PSRepository -Name PSGallery).InstallationPolicy -ne 'Trusted') {
             Set-PSRepository -Name PSGallery -InstallationPolicy Trusted
         }
-        Install-Module -Name ExchangeOnlineManagement -Scope CurrentUser -Force -AllowClobber
+        Install-Module -Name ExchangeOnlineManagement -Scope CurrentUser -Force -AllowClobber -MinimumVersion $minVersion
     }
-    Import-Module ExchangeOnlineManagement -ErrorAction Stop
+    # Import newest available version explicitly: an already-installed old copy
+    # can shadow the fresh one on PSModulePath.
+    $newest = Get-Module -ListAvailable -Name ExchangeOnlineManagement |
+        Sort-Object Version -Descending | Select-Object -First 1
+    Import-Module -Name ExchangeOnlineManagement -RequiredVersion $newest.Version -ErrorAction Stop
 }
 
 Install-ExoModule
@@ -149,7 +160,24 @@ function Show-SettingsDialog {
 
 function Connect-Exo {
     if (Get-ConnectionInformation -ErrorAction SilentlyContinue) { return }
-    Connect-ExchangeOnline -UserPrincipalName $Script:Config.ServiceAccountUPN -ShowBanner:$false
+    $connectArgs = @{
+        UserPrincipalName = $Script:Config.ServiceAccountUPN
+        ShowBanner        = $false
+        ErrorAction       = 'Stop'
+    }
+    try {
+        # Module >= 3.7.0: WAM broker auth (default). No embedded browser, no
+        # ActiveX control, works on any apartment state.
+        Connect-ExchangeOnline @connectArgs
+    } catch {
+        $wamFailed = $_.Exception.Message -match 'WAM|Web Account Manager|broker'
+        if (-not $wamFailed) { throw }
+        # -DisableWAM (module >= 3.7.2) falls back to the MSAL interactive
+        # browser flow. On STA (guaranteed by the relaunch guard above) the
+        # legacy path works; WAM problems are usually machine-specific.
+        Write-Warning "WAM sign-in failed ($($_.Exception.Message)); retrying with -DisableWAM."
+        Connect-ExchangeOnline @connectArgs -DisableWAM
+    }
 }
 
 function Save-MailboxCache {

@@ -6,6 +6,18 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.0.2] - 2026-09-07
+
+- Fix: machines with an outdated ExchangeOnlineManagement module (< 3.7.0)
+  still hit the ActiveX/MSAL embedded-browser sign-in failure. The module
+  bootstrap now enforces version >= 3.7.2: installs or upgrades
+  automatically, and imports the newest installed copy explicitly. 3.7.0+
+  uses the Windows Web Account Manager (WAM) broker for interactive auth,
+  which has no embedded browser and no COM apartment dependency.
+- Add: `Connect-Exo` falls back to `Connect-ExchangeOnline -DisableWAM`
+  when the WAM broker itself errors (per Microsoft's guidance for
+  WAM-related connection errors).
+
 ## [1.0.1] - 2026-09-07
 
 - Fix: interactive sign-in could fail with "ActiveX control
@@ -49,6 +61,7 @@ Initial release.
   CHANGELOG - no source-repo bloat - and attaches it to the GitHub
   release with the matching changelog section as notes.
 
-[Unreleased]: https://github.com/mardahl/EXO-mailforwardManager/compare/v1.0.1...HEAD
+[Unreleased]: https://github.com/mardahl/EXO-mailforwardManager/compare/v1.0.2...HEAD
+[1.0.2]: https://github.com/mardahl/EXO-mailforwardManager/compare/v1.0.1...v1.0.2
 [1.0.1]: https://github.com/mardahl/EXO-mailforwardManager/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/mardahl/EXO-mailforwardManager/releases/tag/v1.0.0

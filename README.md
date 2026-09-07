@@ -95,9 +95,9 @@ Dry-run config + connectivity without touching mailboxes:
 
 ### Modules
 
-- [`ExchangeOnlineManagement`](https://www.powershellgallery.com/packages/ExchangeOnlineManagement) v3+ - the only dependency
+- [`ExchangeOnlineManagement`](https://www.powershellgallery.com/packages/ExchangeOnlineManagement) v3.7.2+ - the only dependency. 3.7.0+ signs in via the Windows Web Account Manager (WAM) broker; older versions use the legacy embedded browser and fail on some machines.
 
-The script installs it automatically (CurrentUser scope) on first run if missing. To install manually instead:
+The script installs or upgrades it automatically (CurrentUser scope) on first run if missing or too old. To install manually instead:
 
 ```powershell
 Install-Module ExchangeOnlineManagement -Scope CurrentUser
