@@ -45,8 +45,9 @@ Invoke-ScriptAnalyzer -Path .\MailboxForwardingTool.ps1 -Settings .\PSScriptAnal
 
 CI runs the same analyzer plus a parse check
 (`[System.Management.Automation.Language.Parser]::ParseFile`) on the
-script. GUI behavior is verified manually against a test tenant - CI
-cannot host WinForms.
+script. CI also runs offline loading and apply-count checks plus native
+WinForms filtering and selection checks on Windows PowerShell 5.1. Live
+Exchange behavior and mouse/keyboard interactions require manual testing.
 
 ## What to test before a PR
 
@@ -56,9 +57,15 @@ cannot host WinForms.
   that still exist.
 - Prefix edit recomputes `Will forward to` in the same row.
 - Filter: search box + All / Has forward / No forward radios.
+- Select checkboxes update the count immediately by mouse and keyboard.
+  Select all shown checks only filtered rows; Clear selection also clears
+  hidden rows. Checked mailboxes survive filter changes and appear in Preview.
+- Preview is disabled with zero checked mailboxes. One checked mailbox
+  appears alone in Preview, regardless of row highlighting.
 - Preview shows overwrites in red, on-prem rows in orange with skip text.
 - Apply writes a changelog CSV with one row per mailbox and the correct
   Result per row; grid updates to show the new forward.
+- Apply summary shows numeric counts for a single success, skip, or error.
 - Cache TTL honored: relaunch within TTL skips enumeration, past TTL
   re-enumerates.
 

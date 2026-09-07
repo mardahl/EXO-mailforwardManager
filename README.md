@@ -18,19 +18,16 @@ Copy `config.example.json` to `config.json` and fill in the target domain and se
 .\MailboxForwardingTool.ps1
 ```
 
-The tool lists every user mailbox (cached locally), lets you filter and multi-select, edit the forwarding prefix per row, then **Preview → Apply**. A timestamped changelog CSV is written per apply-run.
+The tool lists every user mailbox (cached locally), lets you filter and check the mailboxes to update, edit the forwarding prefix per row, then **Preview → Apply**. A timestamped changelog CSV is written per apply-run.
 
 ```
  Mailbox Forwarding Tool
  [search___________________]  (•) All  ( ) Has forward  ( ) No forward      [Refresh] [Settings]
- ┌──────────────────────────┬──────────────────────────┬─────────┬────────────┬────────────┬──────────────────────────┐
- │ Mailbox                  │ Current forward          │ On-prem?│Deliver+Store│ Prefix    │ Will forward to          │
- ├──────────────────────────┼──────────────────────────┼─────────┼────────────┼────────────┼──────────────────────────┤
- │ alice@source.example.com │                          │         │ [x]        │ alice      │ alice@target.example.com │
- │ bob@source.example.com   │ bob@target.example.com   │         │ [x]        │ bob        │ bob@target.example.com   │
- │ carol@source.example.com │                          │  yes    │ [x]        │ carol      │ carol@target.example.com │
- └──────────────────────────┴──────────────────────────┴─────────┴────────────┴────────────┴──────────────────────────┘
-                                                                                                  [Preview →]
+ | Select | Mailbox                  | Current forward        | On-prem? | Deliver+Store | Prefix | Will forward to          |
+ | [x]    | alice@source.example.com |                        |          | [x]           | alice  | alice@target.example.com |
+ | [ ]    | bob@source.example.com   | bob@target.example.com |          | [x]           | bob    | bob@target.example.com   |
+ | [ ]    | carol@source.example.com |                        | yes      | [x]           | carol  | carol@target.example.com |
+ [Select all shown] [Clear selection]  Selected: 1 (0 hidden)                                            [Preview >]
 ```
 
 ---
@@ -39,6 +36,7 @@ The tool lists every user mailbox (cached locally), lets you filter and multi-se
 - [Why](#why)
 - [Features](#features)
 - [Quick start](#quick-start)
+- [Select mailboxes](#select-mailboxes)
 - [Requirements](#requirements)
 - [Files the tool writes](#files-the-tool-writes)
 - [Caveats](#caveats)
@@ -62,7 +60,7 @@ This tool puts a GUI over `Set-Mailbox -ForwardingSmtpAddress`: the mailbox list
 
 - **Single `.ps1` file** - no modules, no build step; only dependency is `ExchangeOnlineManagement`
 - **PowerShell 5.1** on Windows (works on pwsh 7 too, but the GUI requires Windows)
-- **WinForms grid UI** with live search, Has forward / No forward filter, multi-select
+- **WinForms grid UI** with live search, Has forward / No forward filter, selection checkboxes, and a selected count including hidden rows
 - **Mailbox enumeration cached locally** with configurable TTL - no full tenant re-enumeration per launch
 - **Editable Prefix column**, defaults to the mailbox's primary SMTP local part; `Will forward to` column recomputes live
 - **Preview dialog** showing old → new forward per mailbox; overwrites highlighted red, on-prem-forward mailboxes flagged orange and skipped
@@ -92,6 +90,16 @@ Dry-run config + connectivity without touching mailboxes:
 ```powershell
 .\MailboxForwardingTool.ps1 -SelfTest
 ```
+
+## Select mailboxes
+
+1. Search for a mailbox and edit its **Prefix** or **Deliver+Store** option as needed. Check **Will forward to** before continuing.
+2. Check the mailbox's **Select** checkbox. For several mailboxes, check each one; selections stay checked across searches and view changes.
+3. Use **Select all shown** to check every mailbox matching the current filters. **Clear selection** unchecks all mailboxes, including hidden ones.
+4. Review **Selected: N (M hidden)**. Preview includes all checked mailboxes, even those hidden by the current filter. Row highlighting does not select mailboxes for Apply.
+5. Click **Preview >**, verify the count and every destination, then **Apply**. Preview is disabled until at least one mailbox is checked.
+
+**Deliver+Store is not a selection checkbox.** It controls whether incoming mail is kept in the source mailbox as well as forwarded. Apply reports numeric totals for applied, skipped, and failed mailboxes, including single-mailbox runs.
 
 ## Requirements
 

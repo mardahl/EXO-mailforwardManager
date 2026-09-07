@@ -6,6 +6,15 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-09-07
+
+- Add: explicit Select checkboxes, Select all shown and Clear selection
+  controls, and a live count that includes hidden selections. Checked
+  mailboxes remain selected across filters; Preview uses checked mailboxes
+  rather than highlighted rows and displays the selected count.
+- Fix: Apply summary always shows numeric applied, skipped, and error
+  totals, including single-mailbox results in Windows PowerShell 5.1.
+
 ## [1.0.9] - 2026-09-07
 
 - Fix: searching or switching All / Has forward / No forward no longer tries
@@ -140,7 +149,8 @@ Initial release.
   CHANGELOG - no source-repo bloat - and attaches it to the GitHub
   release with the matching changelog section as notes.
 
-[Unreleased]: https://github.com/mardahl/EXO-mailforwardManager/compare/v1.0.9...HEAD
+[Unreleased]: https://github.com/mardahl/EXO-mailforwardManager/compare/v1.1.0...HEAD
+[1.1.0]: https://github.com/mardahl/EXO-mailforwardManager/compare/v1.0.9...v1.1.0
 [1.0.9]: https://github.com/mardahl/EXO-mailforwardManager/compare/v1.0.8...v1.0.9
 [1.0.8]: https://github.com/mardahl/EXO-mailforwardManager/compare/v1.0.7...v1.0.8
 [1.0.7]: https://github.com/mardahl/EXO-mailforwardManager/compare/v1.0.6...v1.0.7

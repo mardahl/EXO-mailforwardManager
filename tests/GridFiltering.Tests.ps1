@@ -14,12 +14,36 @@ $edit = $ast.Find({ param($node)
 $onEdit = [scriptblock]::Create($edit.Arguments[0].ScriptBlock.Extent.Text.TrimStart('{').TrimEnd('}'))
 function Assert($Condition, $Message) { if (-not $Condition) { throw $Message } }
 
+function Get-Handler($Control, $EventName) {
+    $node = $ast.Find({ param($n)
+        $n -is [System.Management.Automation.Language.InvokeMemberExpressionAst] -and
+        $n.Expression.Extent.Text -eq $Control -and $n.Member.Value -eq $EventName
+    }, $true)
+    Assert ($null -ne $node) "Missing handler: $Control.$EventName"
+    [scriptblock]::Create($node.Arguments[0].ScriptBlock.Extent.Text.TrimStart('{').TrimEnd('}'))
+}
+$selectAll = Get-Handler '$btnSelectAll' 'add_Click'
+$clearSelection = Get-Handler '$btnClearSelection' 'add_Click'
+$preview = Get-Handler '$btnPreview' 'add_Click'
+$update = $ast.Find({ param($node)
+    $node -is [System.Management.Automation.Language.AssignmentStatementAst] -and $node.Left.Extent.Text -eq '$updateSelection'
+}, $true)
+Assert ($null -ne $update) 'Selection count updater missing.'
+$updateSelection = [scriptblock]::Create($update.Right.Expression.ScriptBlock.Extent.Text.TrimStart('{').TrimEnd('}'))
+$selectionLabel = [pscustomobject]@{ Text = '' }
+$btnPreview = [pscustomobject]@{ Enabled = $false }
+function Show-PreviewDialog {
+    param([array]$Rows)
+    $script:Previewed = $Rows
+    $false
+}
+
 $rows = [System.ComponentModel.BindingList[object]]::new()
 foreach ($entry in @(@('alice', ''), @('bob', 'archive@example.net'), @('carol', ''))) {
     $rows.Add([pscustomobject]@{
         PrimarySmtpAddress = "$($entry[0])@example.com"; CurrentForwarding = $entry[1]
         ForwardingPrefix = $entry[0]; WillForwardTo = "$($entry[0])@example.net"
-        DeliverAndStore = $false; HasOnPremForwarding = ''
+        DeliverAndStore = $false; HasOnPremForwarding = ''; Selected = $false
     })
 }
 $search = [pscustomobject]@{ Text = '' }
@@ -35,6 +59,7 @@ if ($windows) {
     foreach ($name in @('PrimarySmtpAddress', 'ForwardingPrefix', 'WillForwardTo')) {
         [void]$grid.Columns.Add((New-Object Windows.Forms.DataGridViewTextBoxColumn -Property @{ Name = $name; DataPropertyName = $name }))
     }
+    [void]$grid.Columns.Add((New-Object Windows.Forms.DataGridViewCheckBoxColumn -Property @{ Name = 'Selected'; DataPropertyName = 'Selected' }))
     $form.Controls.Add($grid)
     $grid.DataSource = $rows
     $form.Show()
@@ -49,6 +74,7 @@ if ($windows) {
     $grid | Add-Member ScriptMethod EndEdit { $true }
     $grid | Add-Member ScriptMethod ClearSelection { }
     $grid | Add-Member ScriptMethod InvalidateRow { }
+    $grid | Add-Member ScriptMethod Refresh { }
 }
 try {
     # Excluding the current row must not set its Visible property.
@@ -83,6 +109,51 @@ try {
         }
     }
     Assert ($rows[1].ForwardingPrefix -eq 'edited' -and $rows[1].DeliverAndStore) 'Edits lost after hiding and restoring a row.'
+
+    & $updateSelection
+    Assert ($selectionLabel.Text -eq 'Selected: 0 (0 hidden)' -and -not $btnPreview.Enabled) 'Empty selection must disable Preview.'
+    $search.Text = 'bob'
+    & $applyFilter
+    if ($windows) {
+        $grid.add_CellValueChanged($onEdit)
+        $grid.add_CurrentCellDirtyStateChanged((Get-Handler '$grid' 'add_CurrentCellDirtyStateChanged'))
+        $grid.Rows[0].Cells['Selected'].Value = $true
+        [void]$grid.EndEdit()
+    } else {
+        $grid.Rows = @([pscustomobject]@{ DataBoundItem = $rows[1] })
+        $grid.Columns = @([pscustomobject]@{ Name = 'Selected' })
+        $rows[1].Selected = $true
+        & $onEdit $grid ([pscustomobject]@{ RowIndex = 0; ColumnIndex = 0 })
+    }
+    Assert ($rows[1].Selected -and $selectionLabel.Text -eq 'Selected: 1 (0 hidden)') 'Checking one mailbox must update the counter.'
+    if ($windows) {
+        $grid.Rows[0].Cells['Selected'].Value = $false
+        [void]$grid.EndEdit()
+    } else {
+        $rows[1].Selected = $false
+        & $onEdit $grid ([pscustomobject]@{ RowIndex = 0; ColumnIndex = 0 })
+    }
+    Assert (-not $rows[1].Selected -and -not $btnPreview.Enabled) 'Unchecking the last mailbox must disable Preview.'
+    & $selectAll
+    Assert ($rows[1].Selected -and -not $rows[0].Selected -and -not $rows[2].Selected) 'Select all shown must not select hidden mailboxes.'
+    Assert ($selectionLabel.Text -eq 'Selected: 1 (0 hidden)' -and $btnPreview.Enabled) 'Single checked row must show count 1.'
+    $search.Text = 'alice'
+    & $applyFilter
+    Assert ($rows[1].Selected -and $selectionLabel.Text -eq 'Selected: 1 (1 hidden)') 'Filtering must retain and report hidden selections.'
+    & $selectAll
+    Assert ($selectionLabel.Text -eq 'Selected: 2 (1 hidden)') 'Selection must accumulate across searches.'
+    & $preview
+    Assert (($script:Previewed.PrimarySmtpAddress -join ',') -eq 'alice@example.com,bob@example.com') 'Preview must use all checked mailboxes, not highlighted rows.'
+    & $clearSelection
+    Assert (@($rows | Where-Object Selected).Count -eq 0 -and -not $btnPreview.Enabled) 'Clear selection must also clear hidden checkboxes.'
+    & $selectAll
+    & $preview
+    Assert ($script:Previewed.Count -eq 1 -and $script:Previewed[0].PrimarySmtpAddress -eq 'alice@example.com') 'Preview must support one checked mailbox.'
+    $search.Text = 'missing'
+    & $applyFilter
+    & $selectAll
+    Assert ($selectionLabel.Text -eq 'Selected: 1 (1 hidden)') 'Select all shown on empty results must leave hidden selections unchanged.'
+    & $clearSelection
     $rows.Clear()
     & $applyFilter
     Assert ($grid.DataSource.Count -eq 0) 'Empty mailbox list must be supported.'

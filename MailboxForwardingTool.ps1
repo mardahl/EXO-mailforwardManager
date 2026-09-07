@@ -283,7 +283,7 @@ function Get-MailboxList {
 function Show-PreviewDialog {
     param([Parameter(Mandatory)][array]$Rows)
     $f = New-Object Windows.Forms.Form -Property @{
-        Text='Preview changes'; Width=820; Height=520; StartPosition='CenterParent'
+        Text="Preview changes - $($Rows.Count) selected"; Width=820; Height=520; StartPosition='CenterParent'
     }
     $lv = New-Object Windows.Forms.ListView -Property @{
         Left=12; Top=12; Width=780; Height=430; View='Details'; FullRowSelect=$true; GridLines=$true
@@ -376,9 +376,9 @@ function Set-MailboxForwards {
 
     $log | Export-Csv -Path $logPath -NoTypeInformation -Encoding UTF8
 
-    $ok   = ($log | Where-Object Result -eq 'OK').Count
-    $skip = ($log | Where-Object Result -eq 'Skipped').Count
-    $err  = ($log | Where-Object Result -eq 'Error').Count
+    $ok   = @($log | Where-Object Result -eq 'OK').Count
+    $skip = @($log | Where-Object Result -eq 'Skipped').Count
+    $err  = @($log | Where-Object Result -eq 'Error').Count
     [Windows.Forms.MessageBox]::Show(
         "Applied: $ok`nSkipped: $skip`nErrors: $err`n`nLog: $logPath",
         'Apply complete')
@@ -402,14 +402,18 @@ function Show-MainForm {
     $rbNone = New-Object Windows.Forms.RadioButton -Property @{ Text='No forward';   Left=492; Top=16; Width=100 }
     $btnRefresh  = New-Object Windows.Forms.Button -Property @{ Text='Refresh';  Left=860; Top=12; Width=80 }
     $btnSettings = New-Object Windows.Forms.Button -Property @{ Text='Settings'; Left=948; Top=12; Width=80 }
-    $btnPreview  = New-Object Windows.Forms.Button -Property @{ Text='Preview >'; Left=948; Top=560; Width=140 }
+    $btnPreview  = New-Object Windows.Forms.Button -Property @{ Text='Preview >'; Left=948; Top=560; Width=124; Enabled=$false }
+    $btnSelectAll = New-Object Windows.Forms.Button -Property @{ Text='Select &all shown'; Left=16; Top=560; Width=128 }
+    $btnClearSelection = New-Object Windows.Forms.Button -Property @{ Text='&Clear selection'; Left=152; Top=560; Width=128 }
+    $selectionLabel = New-Object Windows.Forms.Label -Property @{ Text='Selected: 0 (0 hidden)'; Left=296; Top=565; Width=400 }
 
     $grid = New-Object Windows.Forms.DataGridView -Property @{
         Left=16; Top=48; Width=1056; Height=500
-        AutoGenerateColumns=$false; AllowUserToAddRows=$false; SelectionMode='FullRowSelect'; MultiSelect=$true
+        AutoGenerateColumns=$false; AllowUserToAddRows=$false; AllowUserToDeleteRows=$false; SelectionMode='CellSelect'; MultiSelect=$false
         EditMode='EditOnEnter'
     }
 
+    [void]$grid.Columns.Add((New-Object Windows.Forms.DataGridViewCheckBoxColumn -Property @{ Name='Selected'; HeaderText='Select'; Width=56; DataPropertyName='Selected'; SortMode='NotSortable'; Frozen=$true }))
     [void]$grid.Columns.Add((New-Object Windows.Forms.DataGridViewTextBoxColumn -Property @{ Name='PrimarySmtpAddress'; HeaderText='Mailbox'; ReadOnly=$true; Width=240; DataPropertyName='PrimarySmtpAddress'; SortMode='NotSortable' }))
     [void]$grid.Columns.Add((New-Object Windows.Forms.DataGridViewTextBoxColumn -Property @{ Name='CurrentForwarding'; HeaderText='Current forward'; ReadOnly=$true; Width=240; DataPropertyName='CurrentForwarding'; SortMode='NotSortable' }))
     [void]$grid.Columns.Add((New-Object Windows.Forms.DataGridViewTextBoxColumn -Property @{ Name='HasOnPremForwarding'; HeaderText='On-prem?'; ReadOnly=$true; Width=70; DataPropertyName='HasOnPremForwarding'; SortMode='NotSortable' }))
@@ -417,7 +421,7 @@ function Show-MainForm {
     [void]$grid.Columns.Add((New-Object Windows.Forms.DataGridViewTextBoxColumn -Property @{ Name='ForwardingPrefix'; HeaderText='Prefix'; Width=180; DataPropertyName='ForwardingPrefix'; SortMode='NotSortable' }))
     [void]$grid.Columns.Add((New-Object Windows.Forms.DataGridViewTextBoxColumn -Property @{ Name='WillForwardTo'; HeaderText='Will forward to'; ReadOnly=$true; Width=240; DataPropertyName='WillForwardTo'; SortMode='NotSortable' }))
 
-    $form.Controls.AddRange(@($search,$rbAll,$rbHas,$rbNone,$btnRefresh,$btnSettings,$grid,$btnPreview))
+    $form.Controls.AddRange(@($search,$rbAll,$rbHas,$rbNone,$btnRefresh,$btnSettings,$grid,$btnSelectAll,$btnClearSelection,$selectionLabel,$btnPreview))
 
     # Build row view models
     $rows = [System.ComponentModel.BindingList[object]]::new()
@@ -425,6 +429,7 @@ function Show-MainForm {
         $prefix = ($m.PrimarySmtpAddress -split '@')[0]
         $willTo = if ($prefix) { "$prefix@$($Script:Config.ForwardingDomain)" } else { '' }
         $rows.Add([pscustomobject]@{
+            Selected             = $false
             PrimarySmtpAddress   = $m.PrimarySmtpAddress
             CurrentForwarding    = $m.ForwardingSmtpAddress
             HasOnPremForwarding  = if ($m.HasOnPremForwardingAddress) { 'yes' } else { '' }
@@ -434,6 +439,19 @@ function Show-MainForm {
         })
     }
     $grid.DataSource = $rows
+
+    $updateSelection = {
+        $count = @($rows | Where-Object Selected).Count
+        $shown = @($grid.DataSource | Where-Object Selected).Count
+        $selectionLabel.Text = "Selected: $count ($($count - $shown) hidden)"
+        $btnPreview.Enabled = $count -gt 0
+    }
+    # Commit checkboxes immediately; text edits still commit when leaving the cell.
+    $grid.add_CurrentCellDirtyStateChanged({
+        if ($grid.IsCurrentCellDirty -and $grid.CurrentCell -is [Windows.Forms.DataGridViewCheckBoxCell]) {
+            [void]$grid.CommitEdit([Windows.Forms.DataGridViewDataErrorContexts]::Commit)
+        }
+    })
 
     # Recompute WillForwardTo when prefix edited
     $grid.add_CellValueChanged({
@@ -446,6 +464,7 @@ function Show-MainForm {
             $row.WillForwardTo = if ($row.ForwardingPrefix) { "$($row.ForwardingPrefix)@$($Script:Config.ForwardingDomain)" } else { '' }
             $grid.InvalidateRow($e.RowIndex)
         }
+        if ($grid.Columns[$e.ColumnIndex].Name -eq 'Selected') { & $updateSelection }
     })
 
     # Filter logic
@@ -462,15 +481,27 @@ function Show-MainForm {
         }
         # Filter the binding, not row visibility: CurrencyManager owns the current row.
         $grid.DataSource = $filtered
-        # Rebinding selects the first row automatically; Preview requires explicit selection.
+        # Highlighting is navigation only; checked row objects control Preview.
         $grid.ClearSelection()
+        & $updateSelection
     }
     $search.add_TextChanged($applyFilter)
     $rbAll.add_CheckedChanged($applyFilter)
     $rbHas.add_CheckedChanged($applyFilter)
     $rbNone.add_CheckedChanged($applyFilter)
 
-    # Selection tracking: mark Selected on selected rows only at Preview time
+    $btnSelectAll.add_Click({
+        if (-not $grid.EndEdit()) { return }
+        foreach ($row in $grid.DataSource) { $row.Selected = $true }
+        $grid.Refresh()
+        & $updateSelection
+    })
+    $btnClearSelection.add_Click({
+        if (-not $grid.EndEdit()) { return }
+        foreach ($row in $rows) { $row.Selected = $false }
+        $grid.Refresh()
+        & $updateSelection
+    })
 
     $btnSettings.add_Click({
         $new = Show-SettingsDialog -Config $Script:Config
@@ -507,9 +538,9 @@ function Show-MainForm {
     })
 
     $btnPreview.add_Click({
-        $grid.EndEdit()
-        $sel = foreach ($r in $grid.SelectedRows) { $r.DataBoundItem }
-        if (-not $sel) { [Windows.Forms.MessageBox]::Show('Select at least one row.'); return }
+        if (-not $grid.EndEdit()) { return }
+        $sel = @($rows | Where-Object Selected)
+        if ($sel.Count -eq 0) { [Windows.Forms.MessageBox]::Show('Check at least one mailbox in the Select column.'); return }
         $result = Show-PreviewDialog -Rows $sel
         if ($result) {
             Set-MailboxForwards -Rows $sel

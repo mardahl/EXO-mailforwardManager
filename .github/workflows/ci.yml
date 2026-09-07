@@ -48,6 +48,9 @@ jobs:
       - name: Check grid filtering logic
         shell: pwsh
         run: ./tests/GridFiltering.Tests.ps1
+      - name: Check apply result counts
+        shell: pwsh
+        run: ./tests/ApplyCounts.Tests.ps1
 
   windows-smoke:
     name: WinForms smoke (Windows)
@@ -73,3 +76,6 @@ jobs:
       - name: Check grid filtering with WinForms (PowerShell 5.1)
         shell: powershell
         run: ./tests/GridFiltering.Tests.ps1
+      - name: Check apply result counts (PowerShell 5.1)
+        shell: powershell
+        run: ./tests/ApplyCounts.Tests.ps1
