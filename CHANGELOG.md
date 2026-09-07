@@ -9,6 +9,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Add: `Launch-MailboxForwardingTool.bat` launcher. Unblocks all files
   (removes Mark of the Web) and starts the script with Windows PowerShell
   5.1, matching the pattern used in related repos.
+- Add: release workflow. Tagging `v*.*.*` builds a clean zip containing
+  only the script, launcher, example config, README, LICENSE, and
+  CHANGELOG - no source-repo bloat - and attaches it to the GitHub
+  release with the matching changelog section as notes.
 
 ## [1.0.0] - 2026-09-07
 
