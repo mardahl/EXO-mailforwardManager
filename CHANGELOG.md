@@ -6,6 +6,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+- Add: `Launch-MailboxForwardingTool.bat` launcher. Unblocks all files
+  (removes Mark of the Web) and starts the script with Windows PowerShell
+  5.1, matching the pattern used in related repos.
+
 ## [1.0.0] - 2026-09-07
 
 Initial release.

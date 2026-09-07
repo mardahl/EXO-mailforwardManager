@@ -73,6 +73,8 @@ This tool puts a GUI over `Set-Mailbox -ForwardingSmtpAddress`: the mailbox list
 
 ## Quick start
 
+Download the zip from [Releases](https://github.com/mardahl/EXO-mailforwardManager/releases/latest), extract, then double-click **`Launch-MailboxForwardingTool.bat`** - it unblocks the files (removes the Mark of the Web) and starts the tool. Or run it yourself:
+
 ```powershell
 git clone https://github.com/mardahl/EXO-mailforwardManager.git
 cd EXO-mailforwardManager
