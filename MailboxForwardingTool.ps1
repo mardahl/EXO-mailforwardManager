@@ -9,6 +9,7 @@ param([switch]$SelfTest, [switch]$DisableWAM)
 $Script:ScriptDir  = Split-Path -Parent $MyInvocation.MyCommand.Path
 $Script:ConfigPath = Join-Path $Script:ScriptDir 'config.json'
 $Script:CachePath  = Join-Path $Script:ScriptDir 'cache.json'
+$Script:ExoPagingConfigured = $false
 
 # MSAL interactive auth (legacy embedded browser fallback) instantiates a COM
 # ActiveX control, which requires a single-threaded apartment (STA). Apartment
@@ -165,7 +166,7 @@ function Show-SettingsDialog {
 #region Exchange
 
 function Connect-Exo {
-    if (Get-ConnectionInformation -ErrorAction SilentlyContinue) { return }
+    if ($Script:ExoPagingConfigured -and (Get-ConnectionInformation -ErrorAction SilentlyContinue)) { return }
     # Deliberately no -UserPrincipalName: passing the UPN as a login hint makes
     # MSAL do directed auth against an account that may not exist in the
     # Windows account broker -> "Missing wamcompat_id_token in WAM case"
@@ -176,18 +177,21 @@ function Connect-Exo {
     $connectArgs = @{
         ShowBanner  = $false
         ErrorAction = 'Stop'
+        PageSize    = 100
     }
     Write-Host "Sign in as $($Script:Config.ServiceAccountUPN) when prompted."
     if ($DisableWAM) {
         # Relaunched with -DisableWAM: skip the WAM broker entirely and use
         # the MSAL interactive browser from the start of this fresh process.
         Connect-ExchangeOnline @connectArgs -DisableWAM
+        $Script:ExoPagingConfigured = $true
         return
     }
     try {
         # Module >= 3.7.0: WAM broker auth (default). No embedded browser, no
         # ActiveX control, works on any apartment state.
         Connect-ExchangeOnline @connectArgs
+        $Script:ExoPagingConfigured = $true
     } catch {
         # Flatten the whole exception chain: MSAL wraps broker failures
         # ("Error Acquiring Token: ... Missing wamcompat_id_token in WAM case",
@@ -211,7 +215,7 @@ function Connect-Exo {
 }
 
 function Save-MailboxCache {
-    param([Parameter(Mandatory)]$Mailboxes)
+    param([Parameter(Mandatory)][AllowEmptyCollection()][array]$Mailboxes)
     [pscustomobject]@{
         FetchedAt = (Get-Date).ToUniversalTime().ToString('o')
         Mailboxes = $Mailboxes
@@ -234,25 +238,41 @@ function Get-MailboxList {
     param([switch]$Force)
     $cache = Read-MailboxCache
     if (-not $Force -and (Test-CacheFresh $cache)) {
-        Write-Host "Using cached mailbox list ($(($cache.Mailboxes).Count) mailboxes, fetched $($cache.FetchedAt))."
+        Write-Host "Using cached mailbox list ($(@($cache.Mailboxes).Count) mailboxes, fetched $($cache.FetchedAt))."
         return $cache.Mailboxes
     }
     Connect-Exo
-    Write-Host 'Enumerating mailboxes from Exchange Online (can take minutes on large tenants)...'
-    Write-Progress -Activity 'Exchange Online' -Status 'Enumerating mailboxes...'
-    $mbx = Get-EXOMailbox -ResultSize Unlimited -RecipientTypeDetails UserMailbox `
-        -Properties ForwardingSmtpAddress, DeliverToMailboxAndForward, ForwardingAddress
-    Write-Progress -Activity 'Exchange Online' -Completed
-    Write-Host "Retrieved $(@($mbx).Count) mailboxes."
-    $list = foreach ($m in $mbx) {
-        [pscustomobject]@{
-            PrimarySmtpAddress           = [string]$m.PrimarySmtpAddress
-            ForwardingSmtpAddress        = if ($m.ForwardingSmtpAddress) { ($m.ForwardingSmtpAddress -replace '^smtp:','') } else { '' }
-            DeliverToMailboxAndForward   = [bool]$m.DeliverToMailboxAndForward
-            HasOnPremForwardingAddress   = [bool]$m.ForwardingAddress
-        }
+    Write-Host 'Loading user mailboxes in pages of up to 100. Large tenants can take several minutes; total count is not known yet.'
+    Write-Progress -Activity 'Exchange Online' -Status 'Waiting for mailboxes; large tenants can take several minutes...'
+    $timer = [Diagnostics.Stopwatch]::StartNew()
+    $count = 0
+    try {
+        # Buffer mapped results until the whole query succeeds; never publish a partial list.
+        $list = @(Get-EXOMailbox -ResultSize Unlimited -RecipientTypeDetails UserMailbox `
+            -Properties ForwardingSmtpAddress, DeliverToMailboxAndForward, ForwardingAddress -ErrorAction Stop |
+            ForEach-Object {
+                $m = $_
+                [pscustomobject]@{
+                    PrimarySmtpAddress           = [string]$m.PrimarySmtpAddress
+                    ForwardingSmtpAddress        = if ($m.ForwardingSmtpAddress) { ($m.ForwardingSmtpAddress -replace '^smtp:','') } else { '' }
+                    DeliverToMailboxAndForward   = [bool]$m.DeliverToMailboxAndForward
+                    HasOnPremForwardingAddress   = [bool]$m.ForwardingAddress
+                }
+                $count++
+                if ($count % 100 -eq 0) {
+                    $status = "Retrieved $count mailboxes; elapsed $($timer.Elapsed.ToString('hh\:mm\:ss')). Still loading..."
+                    Write-Host $status
+                    Write-Progress -Activity 'Exchange Online' -Status $status
+                }
+            })
+    } catch {
+        throw "Mailbox loading failed after receiving $count mailboxes. Partial results were discarded; existing cache was not changed. Exchange error: $($_.Exception.Message)"
+    } finally {
+        $timer.Stop()
+        Write-Progress -Activity 'Exchange Online' -Completed
     }
     Save-MailboxCache -Mailboxes $list
+    Write-Host "Retrieved $($list.Count) mailboxes; elapsed $($timer.Elapsed.ToString('hh\:mm\:ss')). Loading complete."
     $list
 }
 
@@ -369,7 +389,7 @@ function Set-MailboxForwards {
 #region UI
 
 function Show-MainForm {
-    param([Parameter(Mandatory)][array]$Mailboxes)
+    param([Parameter(Mandatory)][AllowEmptyCollection()][array]$Mailboxes)
 
     $form = New-Object Windows.Forms.Form -Property @{
         Text='Mailbox Forwarding Tool'; Width=1100; Height=640; StartPosition='CenterScreen'
@@ -464,7 +484,7 @@ function Show-MainForm {
     $btnRefresh.add_Click({
         $form.Cursor = 'WaitCursor'
         try {
-            $fresh = Get-MailboxList -Force
+            $fresh = @(Get-MailboxList -Force)
             # update rows in-place so edits are kept where mailbox still exists
             $byAddr = @{}
             foreach ($m in $fresh) { $byAddr[$m.PrimarySmtpAddress] = $m }
@@ -476,6 +496,9 @@ function Show-MainForm {
                 }
             }
             $grid.Refresh()
+        } catch {
+            Write-Host "Refresh failed: $($_.Exception.Message)"
+            [void][Windows.Forms.MessageBox]::Show("Refresh failed: $($_.Exception.Message)", 'Error')
         } finally { $form.Cursor = 'Default' }
     })
 
@@ -512,7 +535,7 @@ function Main {
     }
     if ($SelfTest) {
         Connect-Exo
-        $list = Get-MailboxList -Force
+        $list = @(Get-MailboxList -Force)
         Write-Host "Self-test OK. $($list.Count) mailboxes."
         return
     }
@@ -521,7 +544,7 @@ function Main {
         return
     }
     Write-Host 'Loading mailbox list...'
-    $mailboxes = Get-MailboxList
+    $mailboxes = @(Get-MailboxList)
     Write-Host 'Opening main window.'
     Show-MainForm -Mailboxes $mailboxes
 }

@@ -42,6 +42,9 @@ jobs:
               throw "Parse errors in MailboxForwardingTool.ps1."
           }
           Write-Host 'Parse OK.'
+      - name: Check mailbox loading
+        shell: pwsh
+        run: ./tests/MailboxLoading.Tests.ps1
 
   windows-smoke:
     name: WinForms smoke (Windows)
@@ -61,3 +64,6 @@ jobs:
           [void][System.Management.Automation.Language.Parser]::ParseFile("$PWD/MailboxForwardingTool.ps1", [ref]$tokens, [ref]$errs)
           if ($errs.Count -gt 0) { throw "Parse errors." }
           Write-Host 'Windows PowerShell 5.1 parse + WinForms load OK.'
+      - name: Check mailbox loading (PowerShell 5.1)
+        shell: powershell
+        run: ./tests/MailboxLoading.Tests.ps1

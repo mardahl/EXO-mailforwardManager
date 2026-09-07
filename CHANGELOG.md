@@ -6,6 +6,25 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.0.8] - 2026-09-07
+
+- Fix: mailbox retrieval stops on Exchange errors instead of reporting zero
+  results and then failing with a null-argument error. Partial results are
+  discarded and existing cache is preserved. Refresh reports the error
+  without changing displayed rows.
+- Fix: successful empty mailbox lists can be cached and displayed.
+- Change: connections request native pages of up to 100 entries. Mailbox
+  loading warns that large tenants can take several minutes and reports
+  count and elapsed time every 100 results, plus the final count.
+- Add: offline mailbox-loading regression checks in PowerShell 7 and
+  Windows PowerShell 5.1 CI.
+
+### Known limitations
+
+- Smaller pages do not guarantee resolution of underlying Exchange transport
+  failures. Progress depends on results arriving from Exchange. Live tenant
+  paging and Windows dialog behavior still require manual validation.
+
 ## [1.0.7] - 2026-09-07
 
 - Fix: silent gap between sign-in and main window - mailbox enumeration ran
@@ -110,7 +129,8 @@ Initial release.
   CHANGELOG - no source-repo bloat - and attaches it to the GitHub
   release with the matching changelog section as notes.
 
-[Unreleased]: https://github.com/mardahl/EXO-mailforwardManager/compare/v1.0.7...HEAD
+[Unreleased]: https://github.com/mardahl/EXO-mailforwardManager/compare/v1.0.8...HEAD
+[1.0.8]: https://github.com/mardahl/EXO-mailforwardManager/compare/v1.0.7...v1.0.8
 [1.0.7]: https://github.com/mardahl/EXO-mailforwardManager/compare/v1.0.6...v1.0.7
 [1.0.6]: https://github.com/mardahl/EXO-mailforwardManager/compare/v1.0.5...v1.0.6
 [1.0.5]: https://github.com/mardahl/EXO-mailforwardManager/compare/v1.0.4...v1.0.5

@@ -83,7 +83,9 @@ copy config.example.json config.json
 .\MailboxForwardingTool.ps1
 ```
 
-First run prompts for the service account via `Connect-ExchangeOnline` (MFA handled by the module). Subsequent runs reuse the existing EXO connection if one is active in the same session.
+Each run configures an Exchange Online connection with a page size of 100 via `Connect-ExchangeOnline` (MFA handled by the module). Authentication may reuse an existing sign-in. Refresh reuses the connection configured by that run.
+
+Mailbox loading can take several minutes on large tenants. The console warns before fetching and reports the count and elapsed time every 100 mailboxes, then prints the final count. The total is unknown until loading finishes. Failed retrievals discard partial results and leave the existing cache unchanged; Refresh also keeps the displayed rows if retrieval fails.
 
 Dry-run config + connectivity without touching mailboxes:
 
@@ -126,6 +128,7 @@ All three are written next to the script and are `.gitignore`d. The cache and ch
 
 Known limitations:
 
+- Smaller pages do not guarantee that Exchange transport errors disappear. If loading reports an underlying connection failure, check connectivity, proxy/TLS inspection, and Exchange service health before retrying. Progress updates depend on results arriving from Exchange; they are not a continuous heartbeat.
 - **Windows-only GUI.** WinForms requires a Windows desktop session. PowerShell 7 on macOS/Linux can parse the script but cannot display the forms.
 - **On-prem `ForwardingAddress` not migrated.** Mailboxes whose forwarding points at an on-prem recipient object are flagged and skipped; they are not converted to `ForwardingSmtpAddress` automatically. Handle these manually.
 - **No bulk-clear.** Clearing an existing forward (setting it to `$null`) is not exposed in the UI. Run `Set-Mailbox -ForwardingSmtpAddress $null` by hand if needed.
