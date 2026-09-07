@@ -6,6 +6,12 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.0.4] - 2026-09-07
+
+- Fix: `-DisableWAM` retry passed `ErrorAction` twice (once via splat, once
+  explicitly), which aborts the retry with a parameter binding error. The
+  `-DisableWAM` fallback was therefore unreachable in 1.0.3.
+
 ## [1.0.3] - 2026-09-07
 
 - Fix: WAM broker failures ("Missing wamcompat_id_token in WAM case", tag
@@ -74,7 +80,8 @@ Initial release.
   CHANGELOG - no source-repo bloat - and attaches it to the GitHub
   release with the matching changelog section as notes.
 
-[Unreleased]: https://github.com/mardahl/EXO-mailforwardManager/compare/v1.0.3...HEAD
+[Unreleased]: https://github.com/mardahl/EXO-mailforwardManager/compare/v1.0.4...HEAD
+[1.0.4]: https://github.com/mardahl/EXO-mailforwardManager/compare/v1.0.3...v1.0.4
 [1.0.3]: https://github.com/mardahl/EXO-mailforwardManager/compare/v1.0.2...v1.0.3
 [1.0.2]: https://github.com/mardahl/EXO-mailforwardManager/compare/v1.0.1...v1.0.2
 [1.0.1]: https://github.com/mardahl/EXO-mailforwardManager/compare/v1.0.0...v1.0.1

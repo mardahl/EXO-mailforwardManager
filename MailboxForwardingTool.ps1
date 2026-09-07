@@ -187,7 +187,7 @@ function Connect-Exo {
         if (-not $cmd.Parameters.ContainsKey('DisableWAM')) {
             throw "WAM sign-in failed and this ExchangeOnlineManagement module ($exoVer) has no -DisableWAM switch. Run: Update-Module ExchangeOnlineManagement -Scope CurrentUser, then restart the tool."
         }
-        Connect-ExchangeOnline @connectArgs -DisableWAM -ErrorAction Stop
+        Connect-ExchangeOnline @connectArgs -DisableWAM
     }
 }
 
