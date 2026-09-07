@@ -2,8 +2,6 @@
 [CmdletBinding()]
 param([switch]$SelfTest)
 
-Add-Type -AssemblyName System.Windows.Forms, System.Drawing
-
 $Script:ScriptDir  = Split-Path -Parent $MyInvocation.MyCommand.Path
 $Script:ConfigPath = Join-Path $Script:ScriptDir 'config.json'
 $Script:CachePath  = Join-Path $Script:ScriptDir 'cache.json'
@@ -14,23 +12,28 @@ function Get-Config {
     if (-not (Test-Path $Script:ConfigPath)) { return $null }
     try {
         $raw = Get-Content $Script:ConfigPath -Raw | ConvertFrom-Json
+        if (-not $raw.ForwardingDomain -or -not $raw.ServiceAccountUPN) { return $null }
+        $ttl = 24
+        if ($raw.PSObject.Properties.Name -contains 'CacheTtlHours') {
+            [int]::TryParse([string]$raw.CacheTtlHours, [ref]$ttl) | Out-Null
+        }
+        [pscustomobject]@{
+            ForwardingDomain           = [string]$raw.ForwardingDomain
+            DeliverToMailboxAndForward = [bool]$raw.DeliverToMailboxAndForward
+            ServiceAccountUPN          = [string]$raw.ServiceAccountUPN
+            CacheTtlHours              = $ttl
+        }
     } catch { return $null }
-    if (-not $raw.ForwardingDomain -or -not $raw.ServiceAccountUPN) { return $null }
-    [pscustomobject]@{
-        ForwardingDomain           = [string]$raw.ForwardingDomain
-        DeliverToMailboxAndForward = [bool]$raw.DeliverToMailboxAndForward
-        ServiceAccountUPN          = [string]$raw.ServiceAccountUPN
-        CacheTtlHours              = if ($raw.PSObject.Properties.Name -contains 'CacheTtlHours') { [int]$raw.CacheTtlHours } else { 24 }
-    }
 }
 
 function Save-Config {
     param([Parameter(Mandatory)]$Config)
-    $Config | ConvertTo-Json | Set-Content -Path $Script:ConfigPath -Encoding UTF8
+    $Config | ConvertTo-Json -Depth 5 | Set-Content -Path $Script:ConfigPath -Encoding UTF8
 }
 
 function Show-SettingsDialog {
     param($Config)
+    Add-Type -AssemblyName System.Windows.Forms, System.Drawing
     $form = New-Object Windows.Forms.Form -Property @{
         Text='Settings'; Width=420; Height=260; StartPosition='CenterScreen'; FormBorderStyle='FixedDialog'
     }
