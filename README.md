@@ -93,9 +93,11 @@ Dry-run config + connectivity without touching mailboxes:
 
 ## Requirements
 
-### Modules (install once)
+### Modules
 
 - [`ExchangeOnlineManagement`](https://www.powershellgallery.com/packages/ExchangeOnlineManagement) v3+ - the only dependency
+
+The script installs it automatically (CurrentUser scope) on first run if missing. To install manually instead:
 
 ```powershell
 Install-Module ExchangeOnlineManagement -Scope CurrentUser

@@ -8,7 +8,38 @@ $Script:ScriptDir  = Split-Path -Parent $MyInvocation.MyCommand.Path
 $Script:ConfigPath = Join-Path $Script:ScriptDir 'config.json'
 $Script:CachePath  = Join-Path $Script:ScriptDir 'cache.json'
 
+# MSAL interactive auth (legacy embedded browser fallback) instantiates a COM
+# ActiveX control, which requires a single-threaded apartment (STA). Apartment
+# state is fixed once per thread, so an MTA host can never be fixed in-place:
+# relaunch the script in an explicit STA PowerShell process. This covers being
+# started from hosts that default to MTA (e.g. some ISE-like or -Mta launches).
+if ([Threading.Thread]::CurrentThread.GetApartmentState() -ne 'STA') {
+    $argList = @('-Sta','-NoProfile','-ExecutionPolicy','Bypass','-File',"`"$PSCommandPath`"")
+    if ($SelfTest) { $argList += '-SelfTest' }
+    $p = Start-Process -FilePath 'powershell.exe' -ArgumentList $argList -Wait -PassThru
+    exit $p.ExitCode
+}
+
 Add-Type -AssemblyName System.Windows.Forms, System.Drawing
+
+function Install-ExoModule {
+    # Zero-touch dependency: ensure ExchangeOnlineManagement (>= 3.x, MSAL/WAM)
+    # is installed for the current user and imported, without operator work.
+    if (-not (Get-Module -ListAvailable -Name ExchangeOnlineManagement)) {
+        Write-Host 'ExchangeOnlineManagement module not found; installing for current user...'
+        $nuget = Get-PackageProvider -Name NuGet -ErrorAction SilentlyContinue
+        if (-not $nuget -or $nuget.Version -lt [version]'2.8.5.201') {
+            Install-PackageProvider -Name NuGet -MinimumVersion 2.8.5.201 -Scope CurrentUser -Force | Out-Null
+        }
+        if ((Get-PSRepository -Name PSGallery).InstallationPolicy -ne 'Trusted') {
+            Set-PSRepository -Name PSGallery -InstallationPolicy Trusted
+        }
+        Install-Module -Name ExchangeOnlineManagement -Scope CurrentUser -Force -AllowClobber
+    }
+    Import-Module ExchangeOnlineManagement -ErrorAction Stop
+}
+
+Install-ExoModule
 
 #region Config
 
@@ -39,48 +70,75 @@ function Show-SettingsDialog {
     param($Config)
     Add-Type -AssemblyName System.Windows.Forms, System.Drawing
     $form = New-Object Windows.Forms.Form -Property @{
-        Text='Settings'; Width=420; Height=260; StartPosition='CenterScreen'; FormBorderStyle='FixedDialog'
+        Text='Initial setup'; Width=640; Height=420; StartPosition='CenterScreen'; FormBorderStyle='FixedDialog'
+        MaximizeBox=$false; MinimizeBox=$false
     }
-    $y = 16
-    $labels = 'Forwarding domain','Service account UPN','Cache TTL (hours)'
-    $boxes  = @{}
-    foreach ($label in $labels) {
-        $l = New-Object Windows.Forms.Label -Property @{ Text=$label; Left=16; Top=$y+4; Width=160 }
-        $t = New-Object Windows.Forms.TextBox -Property @{ Left=184; Top=$y; Width=200 }
-        $form.Controls.AddRange(@($l,$t))
-        $boxes[$label] = $t
-        $y += 32
+    $font = New-Object Drawing.Font('Segoe UI', 9)
+    $hintFont = New-Object Drawing.Font('Segoe UI', 8)
+    $hintColor = [Drawing.Color]::FromArgb(90, 90, 90)
+    $form.Font = $font
+
+    $intro = New-Object Windows.Forms.Label -Property @{
+        Left=16; Top=14; Width=592; Height=36
+        Text='One-time setup. Values are saved to config.json next to the script and can be changed later by deleting that file.'
+    }
+    $form.Controls.Add($intro)
+
+    $fields = @(
+        @{ Key='ForwardingDomain'; Label='Forwarding domain';
+           Hint='Target domain all selected mailboxes will forward to, e.g. archive.contoso.com. The tool proposes user@domain per row; you can edit individual rows before applying.' },
+        @{ Key='ServiceAccountUPN'; Label='Service account UPN';
+           Hint='Sign-in used for Exchange Online, e.g. svc-exo@contoso.com. Needs Exchange Administrator (or equivalent) rights. MFA is handled by the sign-in prompt on first connect.' },
+        @{ Key='CacheTtlHours'; Label='Cache TTL (hours)';
+           Hint='How long the mailbox list is reused before re-querying Exchange Online. 24 = refresh once a day. Use the Refresh button in the main window to bypass the cache at any time.' }
+    )
+    $boxes = @{}
+    $y = 58
+    foreach ($f in $fields) {
+        $l = New-Object Windows.Forms.Label -Property @{ Text=$f.Label; Left=16; Top=$y+4; Width=170 }
+        $t = New-Object Windows.Forms.TextBox -Property @{ Left=194; Top=$y; Width=414 }
+        $h = New-Object Windows.Forms.Label -Property @{
+            Text=$f.Hint; Left=194; Top=$y+26; Width=414; Height=42
+            Font=$hintFont; ForeColor=$hintColor
+        }
+        $form.Controls.AddRange(@($l,$t,$h))
+        $boxes[$f.Key] = $t
+        $y += 74
     }
     $cb = New-Object Windows.Forms.CheckBox -Property @{
-        Text='Deliver to mailbox AND forward'; Left=184; Top=$y; Width=220
+        Text='Deliver to mailbox AND forward'; Left=194; Top=$y; Width=220
     }
-    $form.Controls.Add($cb)
+    $cbHint = New-Object Windows.Forms.Label -Property @{
+        Left=194; Top=$y+24; Width=414; Height=42; Font=$hintFont; ForeColor=$hintColor
+        Text='Checked: incoming mail is kept in the mailbox and also forwarded. Unchecked: mail is only forwarded, nothing is stored locally.'
+    }
+    $form.Controls.AddRange(@($cb,$cbHint))
 
     if ($Config) {
-        $boxes['Forwarding domain'].Text      = $Config.ForwardingDomain
-        $boxes['Service account UPN'].Text    = $Config.ServiceAccountUPN
-        $boxes['Cache TTL (hours)'].Text      = "$($Config.CacheTtlHours)"
+        $boxes['ForwardingDomain'].Text  = $Config.ForwardingDomain
+        $boxes['ServiceAccountUPN'].Text = $Config.ServiceAccountUPN
+        $boxes['CacheTtlHours'].Text     = "$($Config.CacheTtlHours)"
         $cb.Checked = $Config.DeliverToMailboxAndForward
     } else {
-        $boxes['Cache TTL (hours)'].Text = '24'
+        $boxes['CacheTtlHours'].Text = '24'
     }
 
     $ok = New-Object Windows.Forms.Button -Property @{
-        Text='Save'; Left=224; Top=$y+40; Width=80; DialogResult='OK'
+        Text='Save'; Left=448; Top=$y+72; Width=80; DialogResult='OK'
     }
     $cancel = New-Object Windows.Forms.Button -Property @{
-        Text='Cancel'; Left=312; Top=$y+40; Width=80; DialogResult='Cancel'
+        Text='Cancel'; Left=536; Top=$y+72; Width=80; DialogResult='Cancel'
     }
     $form.AcceptButton = $ok; $form.CancelButton = $cancel
     $form.Controls.AddRange(@($ok,$cancel))
 
     if ($form.ShowDialog() -ne 'OK') { return $null }
     $ttl = 24
-    [void][int]::TryParse($boxes['Cache TTL (hours)'].Text, [ref]$ttl)
+    [void][int]::TryParse($boxes['CacheTtlHours'].Text, [ref]$ttl)
     [pscustomobject]@{
-        ForwardingDomain           = $boxes['Forwarding domain'].Text.Trim()
+        ForwardingDomain           = $boxes['ForwardingDomain'].Text.Trim()
         DeliverToMailboxAndForward = $cb.Checked
-        ServiceAccountUPN          = $boxes['Service account UPN'].Text.Trim()
+        ServiceAccountUPN          = $boxes['ServiceAccountUPN'].Text.Trim()
         CacheTtlHours              = $ttl
     }
 }
