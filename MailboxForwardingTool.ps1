@@ -1,4 +1,6 @@
 # MailboxForwardingTool.ps1
+[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSReviewUnusedParameter', 'SelfTest',
+    Justification = 'Bound via $PSBoundParameters at script scope; analyzer cannot see usage inside Main when dot-sourced.')]
 [CmdletBinding()]
 param([switch]$SelfTest)
 
@@ -160,7 +162,7 @@ function Show-PreviewDialog {
         }
         if ($r.HasOnPremForwarding) {
             $item.ForeColor = [Drawing.Color]::DarkOrange
-            $item.SubItems[2].Text = '(skip — on-prem forward set)'
+            $item.SubItems[2].Text = '(skip - on-prem forward set)'
         }
         [void]$lv.Items.Add($item)
     }
@@ -172,7 +174,7 @@ function Show-PreviewDialog {
     ($f.ShowDialog() -eq 'OK')
 }
 
-function Apply-Forwards {
+function Set-MailboxForwards {
     param([Parameter(Mandatory)][array]$Rows)
 
     $stamp = Get-Date -Format 'yyyyMMdd-HHmmss'
@@ -254,7 +256,7 @@ function Show-MainForm {
     $rbNone = New-Object Windows.Forms.RadioButton -Property @{ Text='No forward';   Left=492; Top=16; Width=100 }
     $btnRefresh  = New-Object Windows.Forms.Button -Property @{ Text='Refresh';  Left=860; Top=12; Width=80 }
     $btnSettings = New-Object Windows.Forms.Button -Property @{ Text='Settings'; Left=948; Top=12; Width=80 }
-    $btnPreview  = New-Object Windows.Forms.Button -Property @{ Text='Preview →'; Left=948; Top=560; Width=140 }
+    $btnPreview  = New-Object Windows.Forms.Button -Property @{ Text='Preview >'; Left=948; Top=560; Width=140 }
 
     $grid = New-Object Windows.Forms.DataGridView -Property @{
         Left=16; Top=48; Width=1056; Height=500
@@ -289,6 +291,8 @@ function Show-MainForm {
 
     # Recompute WillForwardTo when prefix edited
     $grid.add_CellValueChanged({
+        [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSReviewUnusedParameter', 's',
+            Justification = 'Event sender parameter required by .NET event signature.')]
         param($s,$e)
         if ($e.RowIndex -lt 0) { return }
         $row = $rows[$e.RowIndex]
@@ -355,7 +359,7 @@ function Show-MainForm {
         if (-not $sel) { [Windows.Forms.MessageBox]::Show('Select at least one row.'); return }
         $result = Show-PreviewDialog -Rows $sel
         if ($result) {
-            Apply-Forwards -Rows $sel
+            Set-MailboxForwards -Rows $sel
             # update row view with applied values
             foreach ($row in $sel) {
                 $row.CurrentForwarding = $row.WillForwardTo
