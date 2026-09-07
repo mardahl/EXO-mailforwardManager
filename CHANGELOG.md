@@ -6,6 +6,16 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.0.6] - 2026-09-07
+
+- Fix: connect no longer passes the service-account UPN to
+  `Connect-ExchangeOnline`. A login hint makes MSAL do directed broker auth
+  against an account that may not be registered in Windows, producing
+  "Missing wamcompat_id_token in WAM case" and a sign-in window that
+  flashes and closes. Without the hint, WAM shows the account picker and
+  the operator signs in with the credentials. The configured UPN is printed
+  to the console as sign-in guidance instead.
+
 ## [1.0.5] - 2026-09-07
 
 - Fix: `-DisableWAM` retry inside the same PowerShell process still hit the
@@ -90,7 +100,8 @@ Initial release.
   CHANGELOG - no source-repo bloat - and attaches it to the GitHub
   release with the matching changelog section as notes.
 
-[Unreleased]: https://github.com/mardahl/EXO-mailforwardManager/compare/v1.0.5...HEAD
+[Unreleased]: https://github.com/mardahl/EXO-mailforwardManager/compare/v1.0.6...HEAD
+[1.0.6]: https://github.com/mardahl/EXO-mailforwardManager/compare/v1.0.5...v1.0.6
 [1.0.5]: https://github.com/mardahl/EXO-mailforwardManager/compare/v1.0.4...v1.0.5
 [1.0.4]: https://github.com/mardahl/EXO-mailforwardManager/compare/v1.0.3...v1.0.4
 [1.0.3]: https://github.com/mardahl/EXO-mailforwardManager/compare/v1.0.2...v1.0.3

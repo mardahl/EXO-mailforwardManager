@@ -163,11 +163,18 @@ function Show-SettingsDialog {
 
 function Connect-Exo {
     if (Get-ConnectionInformation -ErrorAction SilentlyContinue) { return }
+    # Deliberately no -UserPrincipalName: passing the UPN as a login hint makes
+    # MSAL do directed auth against an account that may not exist in the
+    # Windows account broker -> "Missing wamcompat_id_token in WAM case"
+    # (MSAL bug #4095) and a sign-in window that flashes and dies. Without the
+    # hint, WAM shows the account picker / the browser flow prompts for
+    # credentials, and the operator just signs in. The configured UPN is shown
+    # to the operator as guidance instead.
     $connectArgs = @{
-        UserPrincipalName = $Script:Config.ServiceAccountUPN
-        ShowBanner        = $false
-        ErrorAction       = 'Stop'
+        ShowBanner  = $false
+        ErrorAction = 'Stop'
     }
+    Write-Host "Sign in as $($Script:Config.ServiceAccountUPN) when prompted."
     if ($DisableWAM) {
         # Relaunched with -DisableWAM: skip the WAM broker entirely and use
         # the MSAL interactive browser from the start of this fresh process.
