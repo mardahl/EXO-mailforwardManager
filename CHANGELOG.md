@@ -6,6 +6,16 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.0.5] - 2026-09-07
+
+- Fix: `-DisableWAM` retry inside the same PowerShell process still hit the
+  WAM broker (module 3.10.1) - the EXO module appears to latch MSAL broker /
+  native msalruntime state at first connect. On WAM failure the tool now
+  relaunches itself in a fresh process with a new `-DisableWAM` script
+  switch, so the retry connects with the broker disabled from the start.
+  New script parameter: `-DisableWAM` (also usable directly to skip WAM on
+  machines known to have broker problems).
+
 ## [1.0.4] - 2026-09-07
 
 - Fix: `-DisableWAM` retry passed `ErrorAction` twice (once via splat, once
@@ -80,7 +90,8 @@ Initial release.
   CHANGELOG - no source-repo bloat - and attaches it to the GitHub
   release with the matching changelog section as notes.
 
-[Unreleased]: https://github.com/mardahl/EXO-mailforwardManager/compare/v1.0.4...HEAD
+[Unreleased]: https://github.com/mardahl/EXO-mailforwardManager/compare/v1.0.5...HEAD
+[1.0.5]: https://github.com/mardahl/EXO-mailforwardManager/compare/v1.0.4...v1.0.5
 [1.0.4]: https://github.com/mardahl/EXO-mailforwardManager/compare/v1.0.3...v1.0.4
 [1.0.3]: https://github.com/mardahl/EXO-mailforwardManager/compare/v1.0.2...v1.0.3
 [1.0.2]: https://github.com/mardahl/EXO-mailforwardManager/compare/v1.0.1...v1.0.2

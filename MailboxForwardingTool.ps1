@@ -1,8 +1,10 @@
 # MailboxForwardingTool.ps1
 [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSReviewUnusedParameter', 'SelfTest',
     Justification = 'Bound via $PSBoundParameters at script scope; analyzer cannot see usage inside Main when dot-sourced.')]
+[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSReviewUnusedParameter', 'DisableWAM',
+    Justification = 'Read inside Connect-Exo; analyzer cannot see usage when dot-sourced.')]
 [CmdletBinding()]
-param([switch]$SelfTest)
+param([switch]$SelfTest, [switch]$DisableWAM)
 
 $Script:ScriptDir  = Split-Path -Parent $MyInvocation.MyCommand.Path
 $Script:ConfigPath = Join-Path $Script:ScriptDir 'config.json'
@@ -15,7 +17,8 @@ $Script:CachePath  = Join-Path $Script:ScriptDir 'cache.json'
 # started from hosts that default to MTA (e.g. some ISE-like or -Mta launches).
 if ([Threading.Thread]::CurrentThread.GetApartmentState() -ne 'STA') {
     $argList = @('-Sta','-NoProfile','-ExecutionPolicy','Bypass','-File',"`"$PSCommandPath`"")
-    if ($SelfTest) { $argList += '-SelfTest' }
+    if ($SelfTest)   { $argList += '-SelfTest' }
+    if ($DisableWAM) { $argList += '-DisableWAM' }
     $p = Start-Process -FilePath 'powershell.exe' -ArgumentList $argList -Wait -PassThru
     exit $p.ExitCode
 }
@@ -165,6 +168,12 @@ function Connect-Exo {
         ShowBanner        = $false
         ErrorAction       = 'Stop'
     }
+    if ($DisableWAM) {
+        # Relaunched with -DisableWAM: skip the WAM broker entirely and use
+        # the MSAL interactive browser from the start of this fresh process.
+        Connect-ExchangeOnline @connectArgs -DisableWAM
+        return
+    }
     try {
         # Module >= 3.7.0: WAM broker auth (default). No embedded browser, no
         # ActiveX control, works on any apartment state.
@@ -174,20 +183,20 @@ function Connect-Exo {
         # ("Error Acquiring Token: ... Missing wamcompat_id_token in WAM case",
         # known MSAL bug AzureAD/MSAL.NET#4095, no fix) inside generic
         # outer exceptions, so the top-level message often lacks "WAM".
-        $fullMessage = ($_ | Out-String) + ($_.Exception | Out-String)
+        $fullMessage = ''
         $e = $_.Exception
         while ($e) { $fullMessage += " " + $e.Message; $e = $e.InnerException }
         if ($fullMessage -notmatch 'WAM|Web Account Manager|broker|wamcompat') { throw }
-        # -DisableWAM (module >= 3.7.2) is Microsoft's documented workaround
-        # for WAM connection errors: back to the MSAL interactive browser,
-        # which works on the STA thread guaranteed by the relaunch guard.
-        $exoVer = (Get-Module ExchangeOnlineManagement).Version
-        Write-Warning "WAM sign-in failed (module $exoVer); retrying with -DisableWAM (legacy browser sign-in)."
-        $cmd = Get-Command Connect-ExchangeOnline
-        if (-not $cmd.Parameters.ContainsKey('DisableWAM')) {
-            throw "WAM sign-in failed and this ExchangeOnlineManagement module ($exoVer) has no -DisableWAM switch. Run: Update-Module ExchangeOnlineManagement -Scope CurrentUser, then restart the tool."
-        }
-        Connect-ExchangeOnline @connectArgs -DisableWAM
+        # -DisableWAM only reliably takes effect when set before the first
+        # connect in a process: the EXO module latches MSAL broker/native
+        # msalruntime state, so an in-session retry hits WAM again (observed
+        # with module 3.10.1). Relaunch in a fresh process with the switch
+        # instead. The relaunched instance skips the WAM attempt entirely.
+        Write-Warning "WAM sign-in failed; restarting with broker auth disabled (-DisableWAM)."
+        $argList = @('-Sta','-NoProfile','-ExecutionPolicy','Bypass','-File',"`"$PSCommandPath`"",'-DisableWAM')
+        if ($SelfTest) { $argList += '-SelfTest' }
+        $p = Start-Process -FilePath 'powershell.exe' -ArgumentList $argList -Wait -PassThru
+        exit $p.ExitCode
     }
 }
 
