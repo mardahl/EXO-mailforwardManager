@@ -1,0 +1,6 @@
+{
+  "ForwardingDomain": "target.example.com",
+  "DeliverToMailboxAndForward": true,
+  "ServiceAccountUPN": "svc-migration@source.example.com",
+  "CacheTtlHours": 24
+}
