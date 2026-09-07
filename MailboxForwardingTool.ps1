@@ -139,12 +139,101 @@ function Get-MailboxList {
 
 function Show-PreviewDialog {
     param([Parameter(Mandatory)][array]$Rows)
-    [Windows.Forms.MessageBox]::Show('Preview not yet implemented') | Out-Null
-    $false
+    $f = New-Object Windows.Forms.Form -Property @{
+        Text='Preview changes'; Width=820; Height=520; StartPosition='CenterParent'
+    }
+    $lv = New-Object Windows.Forms.ListView -Property @{
+        Left=12; Top=12; Width=780; Height=430; View='Details'; FullRowSelect=$true; GridLines=$true
+    }
+    [void]$lv.Columns.Add('Mailbox',200)
+    [void]$lv.Columns.Add('Old forward',220)
+    [void]$lv.Columns.Add('New forward',220)
+    [void]$lv.Columns.Add('Deliver+Store',110)
+
+    foreach ($r in $Rows) {
+        $item = New-Object Windows.Forms.ListViewItem($r.PrimarySmtpAddress)
+        [void]$item.SubItems.Add($r.CurrentForwarding)
+        [void]$item.SubItems.Add($r.WillForwardTo)
+        [void]$item.SubItems.Add($(if ($r.DeliverAndStore) { 'yes' } else { 'no' }))
+        if ($r.CurrentForwarding -and $r.CurrentForwarding -ne $r.WillForwardTo) {
+            $item.ForeColor = [Drawing.Color]::DarkRed
+        }
+        if ($r.HasOnPremForwarding) {
+            $item.ForeColor = [Drawing.Color]::DarkOrange
+            $item.SubItems[2].Text = '(skip — on-prem forward set)'
+        }
+        [void]$lv.Items.Add($item)
+    }
+
+    $btnApply  = New-Object Windows.Forms.Button -Property @{ Text='Apply';  Left=600; Top=452; Width=90; DialogResult='OK' }
+    $btnCancel = New-Object Windows.Forms.Button -Property @{ Text='Cancel'; Left=702; Top=452; Width=90; DialogResult='Cancel' }
+    $f.AcceptButton=$btnApply; $f.CancelButton=$btnCancel
+    $f.Controls.AddRange(@($lv,$btnApply,$btnCancel))
+    ($f.ShowDialog() -eq 'OK')
 }
 
 function Apply-Forwards {
     param([Parameter(Mandatory)][array]$Rows)
+
+    $stamp = Get-Date -Format 'yyyyMMdd-HHmmss'
+    $logPath = Join-Path $Script:ScriptDir "changelog-$stamp.csv"
+    $log = New-Object System.Collections.Generic.List[object]
+
+    foreach ($r in $Rows) {
+        $old = $r.CurrentForwarding
+        $new = $r.WillForwardTo
+        if ($r.HasOnPremForwarding) {
+            $log.Add([pscustomobject]@{
+                Timestamp=(Get-Date).ToString('o'); Mailbox=$r.PrimarySmtpAddress
+                OldForwardingSmtpAddress=$old; NewForwardingSmtpAddress=$new
+                DeliverToMailboxAndForward=$r.DeliverAndStore
+                Result='Skipped'; Error='On-prem ForwardingAddress set'
+            })
+            continue
+        }
+        try {
+            Set-Mailbox -Identity $r.PrimarySmtpAddress `
+                -ForwardingSmtpAddress $new `
+                -DeliverToMailboxAndForward:$($r.DeliverAndStore) -ErrorAction Stop
+            $log.Add([pscustomobject]@{
+                Timestamp=(Get-Date).ToString('o'); Mailbox=$r.PrimarySmtpAddress
+                OldForwardingSmtpAddress=$old; NewForwardingSmtpAddress=$new
+                DeliverToMailboxAndForward=$r.DeliverAndStore
+                Result='OK'; Error=''
+            })
+        } catch {
+            $log.Add([pscustomobject]@{
+                Timestamp=(Get-Date).ToString('o'); Mailbox=$r.PrimarySmtpAddress
+                OldForwardingSmtpAddress=$old; NewForwardingSmtpAddress=$new
+                DeliverToMailboxAndForward=$r.DeliverAndStore
+                Result='Error'; Error=$_.Exception.Message
+            })
+        }
+    }
+
+    # Update cache with new forward values for OK rows
+    $cache = Read-MailboxCache
+    if ($cache) {
+        $okRows = $log | Where-Object Result -eq 'OK'
+        foreach ($okRow in $okRows) {
+            foreach ($m in $cache.Mailboxes) {
+                if ($m.PrimarySmtpAddress -eq $okRow.Mailbox) {
+                    $m.ForwardingSmtpAddress      = $okRow.NewForwardingSmtpAddress
+                    $m.DeliverToMailboxAndForward = $okRow.DeliverToMailboxAndForward
+                }
+            }
+        }
+        Save-MailboxCache -Mailboxes $cache.Mailboxes
+    }
+
+    $log | Export-Csv -Path $logPath -NoTypeInformation -Encoding UTF8
+
+    $ok   = ($log | Where-Object Result -eq 'OK').Count
+    $skip = ($log | Where-Object Result -eq 'Skipped').Count
+    $err  = ($log | Where-Object Result -eq 'Error').Count
+    [Windows.Forms.MessageBox]::Show(
+        "Applied: $ok`nSkipped: $skip`nErrors: $err`n`nLog: $logPath",
+        'Apply complete')
 }
 
 #endregion
