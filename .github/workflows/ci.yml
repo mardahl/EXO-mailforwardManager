@@ -1,0 +1,63 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    name: PSScriptAnalyzer
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Run PSScriptAnalyzer
+        shell: pwsh
+        run: |
+          Install-Module PSScriptAnalyzer -Force -Scope CurrentUser
+          $results = @(Invoke-ScriptAnalyzer -Path ./MailboxForwardingTool.ps1 -Settings ./PSScriptAnalyzerSettings.psd1 -Severity Error, Warning)
+          if ($results.Count -gt 0) {
+              $results | Format-Table RuleName, ScriptName, Line, Message -AutoSize | Out-String | Write-Host
+              throw "PSScriptAnalyzer reported $($results.Count) finding(s)."
+          }
+          Write-Host 'PSScriptAnalyzer: clean.'
+
+  parse:
+    name: Parse check (PowerShell 7)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Parse script
+        shell: pwsh
+        run: |
+          $errs = $null; $tokens = $null
+          [void][System.Management.Automation.Language.Parser]::ParseFile("$PWD/MailboxForwardingTool.ps1", [ref]$tokens, [ref]$errs)
+          if ($errs.Count -gt 0) {
+              $errs | ForEach-Object { Write-Host ("L{0}: {1}" -f $_.Extent.StartLineNumber, $_.Message) }
+              throw "Parse errors in MailboxForwardingTool.ps1."
+          }
+          Write-Host 'Parse OK.'
+
+  windows-smoke:
+    name: WinForms smoke (Windows)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Load WinForms and dot-source script with stubbed EXO
+        shell: powershell
+        run: |
+          # Stub EXO cmdlets so the script parses + loads without a tenant connection.
+          function Connect-ExchangeOnline { }
+          function Get-ConnectionInformation { }
+          function Get-EXOMailbox { @() }
+          function Set-Mailbox { }
+          Add-Type -AssemblyName System.Windows.Forms, System.Drawing
+          $errs = $null; $tokens = $null
+          [void][System.Management.Automation.Language.Parser]::ParseFile("$PWD/MailboxForwardingTool.ps1", [ref]$tokens, [ref]$errs)
+          if ($errs.Count -gt 0) { throw "Parse errors." }
+          Write-Host 'Windows PowerShell 5.1 parse + WinForms load OK.'

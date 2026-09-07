@@ -1,0 +1,12 @@
+# Tool output (contains directory data - never commit)
+config.json
+cache.json
+changelog-*.csv
+
+# OS / editor noise
+.DS_Store
+Thumbs.db
+*.swp
+.vscode/
+.worktrees/
+.superpowers/
