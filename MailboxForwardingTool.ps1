@@ -47,7 +47,7 @@ function Install-ExoModule {
     # can shadow the fresh one on PSModulePath.
     $newest = Get-Module -ListAvailable -Name ExchangeOnlineManagement |
         Sort-Object Version -Descending | Select-Object -First 1
-    Import-Module -Name ExchangeOnlineManagement -RequiredVersion $newest.Version -ErrorAction Stop
+    Import-Module (Join-Path $newest.ModuleBase "$($newest.Name).psd1") -ErrorAction Stop -Global
 }
 
 Install-ExoModule
@@ -170,13 +170,24 @@ function Connect-Exo {
         # ActiveX control, works on any apartment state.
         Connect-ExchangeOnline @connectArgs
     } catch {
-        $wamFailed = $_.Exception.Message -match 'WAM|Web Account Manager|broker'
-        if (-not $wamFailed) { throw }
-        # -DisableWAM (module >= 3.7.2) falls back to the MSAL interactive
-        # browser flow. On STA (guaranteed by the relaunch guard above) the
-        # legacy path works; WAM problems are usually machine-specific.
-        Write-Warning "WAM sign-in failed ($($_.Exception.Message)); retrying with -DisableWAM."
-        Connect-ExchangeOnline @connectArgs -DisableWAM
+        # Flatten the whole exception chain: MSAL wraps broker failures
+        # ("Error Acquiring Token: ... Missing wamcompat_id_token in WAM case",
+        # known MSAL bug AzureAD/MSAL.NET#4095, no fix) inside generic
+        # outer exceptions, so the top-level message often lacks "WAM".
+        $fullMessage = ($_ | Out-String) + ($_.Exception | Out-String)
+        $e = $_.Exception
+        while ($e) { $fullMessage += " " + $e.Message; $e = $e.InnerException }
+        if ($fullMessage -notmatch 'WAM|Web Account Manager|broker|wamcompat') { throw }
+        # -DisableWAM (module >= 3.7.2) is Microsoft's documented workaround
+        # for WAM connection errors: back to the MSAL interactive browser,
+        # which works on the STA thread guaranteed by the relaunch guard.
+        $exoVer = (Get-Module ExchangeOnlineManagement).Version
+        Write-Warning "WAM sign-in failed (module $exoVer); retrying with -DisableWAM (legacy browser sign-in)."
+        $cmd = Get-Command Connect-ExchangeOnline
+        if (-not $cmd.Parameters.ContainsKey('DisableWAM')) {
+            throw "WAM sign-in failed and this ExchangeOnlineManagement module ($exoVer) has no -DisableWAM switch. Run: Update-Module ExchangeOnlineManagement -Scope CurrentUser, then restart the tool."
+        }
+        Connect-ExchangeOnline @connectArgs -DisableWAM -ErrorAction Stop
     }
 }
 

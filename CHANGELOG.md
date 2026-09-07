@@ -6,6 +6,19 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.0.3] - 2026-09-07
+
+- Fix: WAM broker failures ("Missing wamcompat_id_token in WAM case", tag
+  0x20714047 - known unfixed MSAL.NET bug #4095) were not retried with
+  `-DisableWAM` because MSAL nests the real error inside a generic outer
+  exception. The whole exception chain is now inspected before deciding.
+- Fix: module import now loads the newest installed ExchangeOnlineManagement
+  by exact path; an old copy in Program Files (AllUsers scope) could shadow
+  the upgraded CurrentUser copy.
+- Add: clearer error when the loaded module predates `-DisableWAM` (< 3.7.2),
+  with the exact update command. Retry warning now reports the module
+  version for diagnosis.
+
 ## [1.0.2] - 2026-09-07
 
 - Fix: machines with an outdated ExchangeOnlineManagement module (< 3.7.0)
@@ -61,7 +74,8 @@ Initial release.
   CHANGELOG - no source-repo bloat - and attaches it to the GitHub
   release with the matching changelog section as notes.
 
-[Unreleased]: https://github.com/mardahl/EXO-mailforwardManager/compare/v1.0.2...HEAD
+[Unreleased]: https://github.com/mardahl/EXO-mailforwardManager/compare/v1.0.3...HEAD
+[1.0.3]: https://github.com/mardahl/EXO-mailforwardManager/compare/v1.0.2...v1.0.3
 [1.0.2]: https://github.com/mardahl/EXO-mailforwardManager/compare/v1.0.1...v1.0.2
 [1.0.1]: https://github.com/mardahl/EXO-mailforwardManager/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/mardahl/EXO-mailforwardManager/releases/tag/v1.0.0
