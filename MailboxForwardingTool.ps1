@@ -82,3 +82,53 @@ function Show-SettingsDialog {
 }
 
 #endregion
+
+#region Exchange
+
+function Connect-Exo {
+    if (Get-ConnectionInformation -ErrorAction SilentlyContinue) { return }
+    Connect-ExchangeOnline -UserPrincipalName $Script:Config.ServiceAccountUPN -ShowBanner:$false
+}
+
+function Save-MailboxCache {
+    param([Parameter(Mandatory)]$Mailboxes)
+    [pscustomobject]@{
+        FetchedAt = (Get-Date).ToUniversalTime().ToString('o')
+        Mailboxes = $Mailboxes
+    } | ConvertTo-Json -Depth 5 | Set-Content -Path $Script:CachePath -Encoding UTF8
+}
+
+function Read-MailboxCache {
+    if (-not (Test-Path $Script:CachePath)) { return $null }
+    try { Get-Content $Script:CachePath -Raw | ConvertFrom-Json } catch { $null }
+}
+
+function Test-CacheFresh {
+    param($Cache)
+    if (-not $Cache -or -not $Cache.FetchedAt) { return $false }
+    $age = (Get-Date).ToUniversalTime() - [datetime]$Cache.FetchedAt
+    $age.TotalHours -lt $Script:Config.CacheTtlHours
+}
+
+function Get-MailboxList {
+    param([switch]$Force)
+    $cache = Read-MailboxCache
+    if (-not $Force -and (Test-CacheFresh $cache)) {
+        return $cache.Mailboxes
+    }
+    Connect-Exo
+    $mbx = Get-EXOMailbox -ResultSize Unlimited -RecipientTypeDetails UserMailbox `
+        -Properties ForwardingSmtpAddress, DeliverToMailboxAndForward, ForwardingAddress
+    $list = foreach ($m in $mbx) {
+        [pscustomobject]@{
+            PrimarySmtpAddress           = [string]$m.PrimarySmtpAddress
+            ForwardingSmtpAddress        = if ($m.ForwardingSmtpAddress) { ($m.ForwardingSmtpAddress -replace '^smtp:','') } else { '' }
+            DeliverToMailboxAndForward   = [bool]$m.DeliverToMailboxAndForward
+            HasOnPremForwardingAddress   = [bool]$m.ForwardingAddress
+        }
+    }
+    Save-MailboxCache -Mailboxes $list
+    $list
+}
+
+#endregion
