@@ -16,6 +16,9 @@ $Script:CachePath  = Join-Path $Script:ScriptDir 'cache.json'
 # relaunch the script in an explicit STA PowerShell process. This covers being
 # started from hosts that default to MTA (e.g. some ISE-like or -Mta launches).
 if ([Threading.Thread]::CurrentThread.GetApartmentState() -ne 'STA') {
+    # Spawned console windows close the instant the process exits, erasing
+    # all log output - mark the child to pause before that happens.
+    $env:EXOMFT_PAUSE_ON_EXIT = '1'
     $argList = @('-Sta','-NoProfile','-ExecutionPolicy','Bypass','-File',"`"$PSCommandPath`"")
     if ($SelfTest)   { $argList += '-SelfTest' }
     if ($DisableWAM) { $argList += '-DisableWAM' }
@@ -231,11 +234,16 @@ function Get-MailboxList {
     param([switch]$Force)
     $cache = Read-MailboxCache
     if (-not $Force -and (Test-CacheFresh $cache)) {
+        Write-Host "Using cached mailbox list ($(($cache.Mailboxes).Count) mailboxes, fetched $($cache.FetchedAt))."
         return $cache.Mailboxes
     }
     Connect-Exo
+    Write-Host 'Enumerating mailboxes from Exchange Online (can take minutes on large tenants)...'
+    Write-Progress -Activity 'Exchange Online' -Status 'Enumerating mailboxes...'
     $mbx = Get-EXOMailbox -ResultSize Unlimited -RecipientTypeDetails UserMailbox `
         -Properties ForwardingSmtpAddress, DeliverToMailboxAndForward, ForwardingAddress
+    Write-Progress -Activity 'Exchange Online' -Completed
+    Write-Host "Retrieved $(@($mbx).Count) mailboxes."
     $list = foreach ($m in $mbx) {
         [pscustomobject]@{
             PrimarySmtpAddress           = [string]$m.PrimarySmtpAddress
@@ -294,7 +302,11 @@ function Set-MailboxForwards {
     $logPath = Join-Path $Script:ScriptDir "changelog-$stamp.csv"
     $log = New-Object System.Collections.Generic.List[object]
 
+    $i = 0
     foreach ($r in $Rows) {
+        $i++
+        Write-Progress -Activity 'Applying forwarding' -Status "$i of $($Rows.Count): $($r.PrimarySmtpAddress)" `
+            -PercentComplete (100 * $i / $Rows.Count)
         $old = $r.CurrentForwarding
         $new = $r.WillForwardTo
         if ($r.HasOnPremForwarding) {
@@ -325,6 +337,7 @@ function Set-MailboxForwards {
             })
         }
     }
+    Write-Progress -Activity 'Applying forwarding' -Completed
 
     # Update cache with new forward values for OK rows
     $cache = Read-MailboxCache
@@ -507,9 +520,30 @@ function Main {
         [Windows.Forms.MessageBox]::Show("Connect failed: $($_.Exception.Message)",'Error')
         return
     }
+    Write-Host 'Loading mailbox list...'
     $mailboxes = Get-MailboxList
+    Write-Host 'Opening main window.'
     Show-MainForm -Mailboxes $mailboxes
 }
-Main
+
+try {
+    Main
+} catch {
+    # Surface fatal errors in the console too - a dialog alone is invisible
+    # if the console window outlives it or vice versa.
+    Write-Host "FATAL: $($_.Exception.Message)"
+    Write-Host $_.ScriptStackTrace
+    [Windows.Forms.MessageBox]::Show("Unexpected error: $($_.Exception.Message)",'Error') | Out-Null
+    exit 1
+}
+
+# When double-clicked / launched via the .bat, the console closes the instant
+# the script ends - taking all log output with it. Keep it open so the
+# operator can read or copy what happened. Interactive shells are unaffected
+# (their window stays open anyway), so pausing there is harmless but noise;
+# only pause when this console was spawned for us.
+if ($env:EXOMFT_PAUSE_ON_EXIT -eq '1') {
+    Read-Host 'Press Enter to close this window'
+}
 
 #endregion

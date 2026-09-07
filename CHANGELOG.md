@@ -6,6 +6,16 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.0.7] - 2026-09-07
+
+- Fix: silent gap between sign-in and main window - mailbox enumeration ran
+  with zero feedback, and the console window closed right after the form,
+  taking all output (including errors) with it. Now: console messages at
+  each step, `Write-Progress` during enumeration and during apply, fatal
+  errors printed with stack trace, and the console pauses before closing
+  when launched via the .bat or a relaunch (`EXOMFT_PAUSE_ON_EXIT`), so
+  the operator can read/copy what happened.
+
 ## [1.0.6] - 2026-09-07
 
 - Fix: connect no longer passes the service-account UPN to
@@ -100,7 +110,8 @@ Initial release.
   CHANGELOG - no source-repo bloat - and attaches it to the GitHub
   release with the matching changelog section as notes.
 
-[Unreleased]: https://github.com/mardahl/EXO-mailforwardManager/compare/v1.0.6...HEAD
+[Unreleased]: https://github.com/mardahl/EXO-mailforwardManager/compare/v1.0.7...HEAD
+[1.0.7]: https://github.com/mardahl/EXO-mailforwardManager/compare/v1.0.6...v1.0.7
 [1.0.6]: https://github.com/mardahl/EXO-mailforwardManager/compare/v1.0.5...v1.0.6
 [1.0.5]: https://github.com/mardahl/EXO-mailforwardManager/compare/v1.0.4...v1.0.5
 [1.0.4]: https://github.com/mardahl/EXO-mailforwardManager/compare/v1.0.3...v1.0.4
