@@ -6,6 +6,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-09-11
+
 - Change: replaced the WinForms GUI with a terminal UI (TUI). All
   WinForms/`System.Drawing` code, the WinForms grid-filtering test suite,
   and the Windows WinForms-smoke CI job are removed; behavior they covered
