@@ -1,34 +1,48 @@
-# Exercise production summary expressions, including the Windows PowerShell 5.1 singleton shape.
+# Exercise the real Set-MailboxForwards summary counts (zero/single OK/skip/error/mixed).
 $ErrorActionPreference = 'Stop'
-$path = Join-Path (Split-Path $PSScriptRoot -Parent) 'MailboxForwardingTool.ps1'
-$tokens = $null; $parseErrors = $null
-$ast = [System.Management.Automation.Language.Parser]::ParseFile($path, [ref]$tokens, [ref]$parseErrors)
-if ($parseErrors.Count) { throw "Parse errors: $parseErrors" }
-$action = $ast.Find({ param($node)
-    $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq 'Set-MailboxForwards'
-}, $true)
-$counts = $action.FindAll({ param($node)
-    $node -is [System.Management.Automation.Language.AssignmentStatementAst] -and $node.Left.Extent.Text -in '$ok', '$skip', '$err'
-}, $true)
-if ($counts.Count -ne 3) { throw 'Apply summary assignments missing.' }
-$summary = [scriptblock]::Create(($counts.Extent.Text -join "`n") + "`n" + '$ok, $skip, $err')
-foreach ($case in @(
-    @{ Results = @(); Expected = '0,0,0' },
-    @{ Results = @('OK'); Expected = '1,0,0' },
-    @{ Results = @('Skipped'); Expected = '0,1,0' },
-    @{ Results = @('Error'); Expected = '0,0,1' },
-    @{ Results = @('OK', 'OK', 'Skipped', 'Error'); Expected = '2,1,1' }
-)) {
-    foreach ($legacyShape in @($false, $true)) {
-        $log = [System.Collections.Generic.List[object]]::new()
-        foreach ($result in $case.Results) {
-            $entry = [pscustomobject]@{ Result = $result }
-            # PS7 adds a synthetic Count; model PS5.1's absent singleton Count offline.
-            if ($legacyShape) { $entry | Add-Member NoteProperty Count $null }
-            $log.Add($entry)
-        }
-        $actual = (& $summary) -join ','
-        if ($actual -ne $case.Expected) { throw "Expected $($case.Expected), got '$actual' (PS5.1 shape: $legacyShape)." }
+. (Join-Path $PSScriptRoot 'TestSupport.ps1')
+
+function NewRow([string]$Tag, [bool]$OnPrem = $false) {
+    [pscustomobject]@{
+        Selected = $true; PrimarySmtpAddress = "$Tag@example.com"
+        CurrentForwarding = 'old@example.net'; HasOnPremForwarding = $OnPrem
+        DeliverAndStore = $true; ForwardingPrefix = $Tag; WillForwardTo = "$Tag@archive.example.com"
     }
 }
+
+$failures = New-Object 'System.Collections.Generic.List[string]'
+
+foreach ($case in @(
+    @{ Name = 'zero'; Rows = @(); Expected = @{ Applied = 0; Skipped = 0; Errors = 0 } },
+    @{ Name = 'single OK'; Rows = @((NewRow 'a')); Expected = @{ Applied = 1; Skipped = 0; Errors = 0 } },
+    @{ Name = 'single skip'; Rows = @((NewRow 'skip' $true)); Expected = @{ Applied = 0; Skipped = 1; Errors = 0 } },
+    @{ Name = 'single error'; Rows = @((NewRow 'bad')); Expected = @{ Applied = 0; Skipped = 0; Errors = 1 } },
+    @{ Name = 'mixed'; Rows = @((NewRow 'a'), (NewRow 'skip' $true), (NewRow 'bad')); Expected = @{ Applied = 1; Skipped = 1; Errors = 1 } }
+)) {
+    try {
+        function Set-Mailbox {
+            [CmdletBinding()]
+            param($Identity, $ForwardingSmtpAddress, [bool]$DeliverToMailboxAndForward)
+            if ($Identity -eq 'bad@example.com') { throw 'Denied' }
+        }
+        $originalDir = $script:ScriptDir
+        $originalCache = $script:CachePath
+        $temporary = Join-Path ([IO.Path]::GetTempPath()) ([guid]::NewGuid().ToString())
+        [void][IO.Directory]::CreateDirectory($temporary)
+        try {
+            $script:ScriptDir = $temporary
+            $script:CachePath = Join-Path $temporary 'cache.json'
+            $result = Set-MailboxForwards -Rows $case.Rows
+            Assert ($result.Applied -eq $case.Expected.Applied) "$($case.Name): Applied mismatch (got $($result.Applied))."
+            Assert ($result.Skipped -eq $case.Expected.Skipped) "$($case.Name): Skipped mismatch (got $($result.Skipped))."
+            Assert ($result.Errors -eq $case.Expected.Errors) "$($case.Name): Errors mismatch (got $($result.Errors))."
+        } finally {
+            $script:ScriptDir = $originalDir
+            $script:CachePath = $originalCache
+            Remove-Item $temporary -Recurse -Force -ErrorAction SilentlyContinue
+        }
+    } catch { $failures.Add($_.ToString()) }
+}
+
+if ($failures.Count) { throw ($failures -join "`n") }
 Write-Host 'Apply count checks passed (zero, single success/skip/error, mixed results).'

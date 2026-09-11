@@ -21,61 +21,84 @@ jobs:
         run: |
           Install-Module PSScriptAnalyzer -Force -Scope CurrentUser
           $results = @(Invoke-ScriptAnalyzer -Path ./MailboxForwardingTool.ps1 -Settings ./PSScriptAnalyzerSettings.psd1 -Severity Error, Warning)
+          $results += @(Invoke-ScriptAnalyzer -Path ./src -Recurse -Settings ./PSScriptAnalyzerSettings.psd1 -Severity Error, Warning)
           if ($results.Count -gt 0) {
               $results | Format-Table RuleName, ScriptName, Line, Message -AutoSize | Out-String | Write-Host
               throw "PSScriptAnalyzer reported $($results.Count) finding(s)."
           }
           Write-Host 'PSScriptAnalyzer: clean.'
 
-  parse:
-    name: Parse check (PowerShell 7)
+  test:
+    name: Parse + offline tests (Linux, pwsh)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - name: Parse script
+      - name: Parse + analyze
         shell: pwsh
         run: |
-          $errs = $null; $tokens = $null
-          [void][System.Management.Automation.Language.Parser]::ParseFile("$PWD/MailboxForwardingTool.ps1", [ref]$tokens, [ref]$errs)
-          if ($errs.Count -gt 0) {
-              $errs | ForEach-Object { Write-Host ("L{0}: {1}" -f $_.Extent.StartLineNumber, $_.Message) }
-              throw "Parse errors in MailboxForwardingTool.ps1."
+          $paths = @('./MailboxForwardingTool.ps1') + @(Get-ChildItem ./src -Filter '*.ps1' | Select-Object -ExpandProperty FullName)
+          foreach ($path in $paths) {
+              $tokens = $null; $errors = $null
+              [void][System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path $path).Path, [ref]$tokens, [ref]$errors)
+              if ($errors.Count) { $errors | Write-Host; throw "Parse errors in ${path}." }
           }
           Write-Host 'Parse OK.'
-      - name: Check mailbox loading
+      - name: Run each test suite in a fresh process
         shell: pwsh
-        run: ./tests/MailboxLoading.Tests.ps1
-      - name: Check grid filtering logic
-        shell: pwsh
-        run: ./tests/GridFiltering.Tests.ps1
-      - name: Check apply result counts
-        shell: pwsh
-        run: ./tests/ApplyCounts.Tests.ps1
+        run: |
+          $engine = (Get-Process -Id $PID).Path
+          foreach ($test in (Get-ChildItem ./tests -Filter '*.Tests.ps1' | Sort-Object Name)) {
+              Write-Host "--- $($test.Name) ---"
+              & $engine -NoProfile -File $test.FullName
+              if ($LASTEXITCODE -ne 0) { throw "Failed: $($test.Name)" }
+          }
 
-  windows-smoke:
-    name: WinForms smoke (Windows)
+  windows-powershell-test:
+    name: Parse + offline tests (Windows, powershell.exe 5.1)
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v7
-      - name: Load WinForms and dot-source script with stubbed EXO
+      - name: Parse + analyze
         shell: powershell
         run: |
-          # Stub EXO cmdlets so the script parses + loads without a tenant connection.
-          function Connect-ExchangeOnline { }
-          function Get-ConnectionInformation { }
-          function Get-EXOMailbox { @() }
-          function Set-Mailbox { }
-          Add-Type -AssemblyName System.Windows.Forms, System.Drawing
-          $errs = $null; $tokens = $null
-          [void][System.Management.Automation.Language.Parser]::ParseFile("$PWD/MailboxForwardingTool.ps1", [ref]$tokens, [ref]$errs)
-          if ($errs.Count -gt 0) { throw "Parse errors." }
-          Write-Host 'Windows PowerShell 5.1 parse + WinForms load OK.'
-      - name: Check mailbox loading (PowerShell 5.1)
+          $paths = @('./MailboxForwardingTool.ps1') + @(Get-ChildItem ./src -Filter '*.ps1' | Select-Object -ExpandProperty FullName)
+          foreach ($path in $paths) {
+              $tokens = $null; $errors = $null
+              [void][System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path $path).Path, [ref]$tokens, [ref]$errors)
+              if ($errors.Count) { $errors | Write-Host; throw "Parse errors in ${path}." }
+          }
+          Write-Host 'Parse OK.'
+      - name: Run each test suite in a fresh process
         shell: powershell
-        run: ./tests/MailboxLoading.Tests.ps1
-      - name: Check grid filtering with WinForms (PowerShell 5.1)
-        shell: powershell
-        run: ./tests/GridFiltering.Tests.ps1
-      - name: Check apply result counts (PowerShell 5.1)
-        shell: powershell
-        run: ./tests/ApplyCounts.Tests.ps1
+        run: |
+          $engine = (Get-Process -Id $PID).Path
+          foreach ($test in (Get-ChildItem ./tests -Filter '*.Tests.ps1' | Sort-Object Name)) {
+              Write-Host "--- $($test.Name) ---"
+              & $engine -NoProfile -File $test.FullName
+              if ($LASTEXITCODE -ne 0) { throw "Failed: $($test.Name)" }
+          }
+
+  windows-pwsh-test:
+    name: Parse + offline tests (Windows, pwsh)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Parse + analyze
+        shell: pwsh
+        run: |
+          $paths = @('./MailboxForwardingTool.ps1') + @(Get-ChildItem ./src -Filter '*.ps1' | Select-Object -ExpandProperty FullName)
+          foreach ($path in $paths) {
+              $tokens = $null; $errors = $null
+              [void][System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path $path).Path, [ref]$tokens, [ref]$errors)
+              if ($errors.Count) { $errors | Write-Host; throw "Parse errors in ${path}." }
+          }
+          Write-Host 'Parse OK.'
+      - name: Run each test suite in a fresh process
+        shell: pwsh
+        run: |
+          $engine = (Get-Process -Id $PID).Path
+          foreach ($test in (Get-ChildItem ./tests -Filter '*.Tests.ps1' | Sort-Object Name)) {
+              Write-Host "--- $($test.Name) ---"
+              & $engine -NoProfile -File $test.FullName
+              if ($LASTEXITCODE -ne 0) { throw "Failed: $($test.Name)" }
+          }

@@ -6,8 +6,64 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
-## [1.1.0] - 2026-09-07
+- Change: replaced the WinForms GUI with a terminal UI (TUI). All
+  WinForms/`System.Drawing` code, the WinForms grid-filtering test suite,
+  and the Windows WinForms-smoke CI job are removed; behavior they covered
+  (search/filter, select all/clear, hidden-selection accounting, prefix
+  edits, Preview) is now exercised by `tests/MailboxModel.Tests.ps1` and
+  `tests/Tui.Tests.ps1` against the underlying model and dialogs directly.
+- Add: `-Ascii` switch for terminals without Unicode/256-color support.
+- Add: host-support check rejects a redirected or non-interactive console
+  before any module install or network call; missing config opens the
+  Settings dialog in normal mode, and `-SelfTest` prints setup
+  instructions and exits nonzero without prompting.
+- Add: mailbox loading and Apply report progress inline in the TUI instead
+  of `Write-Host`/`Write-Progress`, so no console output leaks into the
+  frame.
+- Change: interactive sign-in (including the `-DisableWAM` retry) now runs
+  on the normal screen buffer even when triggered from inside the TUI,
+  which is restored afterward even on failure.
+- Add: unsupported platforms get an explicit message and nonzero exit
+  before any config, module, or network access.
+- Fix: a broken progress callback can no longer mask a real Exchange fetch
+  failure or crash an otherwise-successful fetch.
+- Fix: the account header shows the actual authenticated UPN instead of
+  the configured `ServiceAccountUPN`.
+- Fix: owned-connection cleanup disconnects only the connection this run
+  opened, never a pre-existing borrowed connection.
+- Fix: `Get-Config` validates a loaded `config.json` through the same
+  rules as the Settings dialog; an invalid `CacheTtlHours` is rejected
+  instead of silently coerced to `0`.
+- Add: `tests/Start-TuiFixture.ps1` - an interactive, fully-offline fixture
+  for manual/real-terminal verification; not run in CI.
+- Change: CI runs parse+analyzer+the full test suite on three runtimes
+  (Linux `pwsh`, Windows PowerShell 5.1, Windows `pwsh`), each test file in
+  its own fresh process.
+- Fix: `Get-DialogBox`'s `BodyCapacity` reported the screen's raw maximum
+  body height instead of the dialog's own clamped height, so the footer
+  could be drawn past the visually centered box on a short dialog/tall
+  terminal.
+- Fix: the Settings dialog no longer pre-coerces a garbage `CacheTtlHours`
+  to `0` before validation.
+- Fix: the per-row forwarding editor now shows the mailbox's existing
+  forwarding address and on-prem flag, wrapped the same way as the
+  proposed destination.
+- Fix: `Show-ReportDialog` now wraps long lines to the dialog's inner
+  width before pagination instead of ellipsizing them.
+- Fix: resizing the terminal below the 80x20 floor while a modal is open
+  no longer lets Y/Save commit a write against an unreadable layout.
+- Fix: removed a dead `'DeliverToMailboxAndForward'` alias check in the
+  row editor's field-focus dispatch.
+- Fix: `Set-MailboxDraft` now rejects a blank/whitespace-only forwarding
+  prefix before any mutation instead of silently clearing forwarding.
+- Change: `HasOnPremForwarding` is now a boolean throughout the mailbox
+  row model (was `'yes'`/`''`); display code checks it directly.
+- Fix: the mailbox editor and Settings dialog now scroll their body
+  (PgUp/PgDn, focus-following viewport) so long values, the focused
+  field, and Save/error text stay reachable at minimum terminal size
+  instead of being cut off past screen capacity.
 
+## [1.1.0] - 2026-09-07
 - Add: explicit Select checkboxes, Select all shown and Clear selection
   controls, and a live count that includes hidden selections. Checked
   mailboxes remain selected across filters; Preview uses checked mailboxes
