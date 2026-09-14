@@ -6,6 +6,17 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.2.1] - 2026-09-14
+
+- Add: `scripts/Build-Release.ps1` builds the release bundle (standalone
+  `MailboxForwardingTool.ps1` with `src/*.ps1` inlined, launcher,
+  `QUICKSTART.txt`, `LICENSE`) - the release zip no longer ships the
+  segmented `src/` folder or `config.example.json`. The release workflow
+  now runs this script instead of copying files by hand.
+- Change: the `-SelfTest` missing-config message now points at running the
+  tool without `-SelfTest` to configure it, since the release zip no
+  longer includes `config.example.json`.
+
 ## [1.2.0] - 2026-09-11
 
 - Change: replaced the WinForms GUI with a terminal UI (TUI). All

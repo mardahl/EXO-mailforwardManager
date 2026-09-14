@@ -22,6 +22,7 @@ jobs:
           Install-Module PSScriptAnalyzer -Force -Scope CurrentUser
           $results = @(Invoke-ScriptAnalyzer -Path ./MailboxForwardingTool.ps1 -Settings ./PSScriptAnalyzerSettings.psd1 -Severity Error, Warning)
           $results += @(Invoke-ScriptAnalyzer -Path ./src -Recurse -Settings ./PSScriptAnalyzerSettings.psd1 -Severity Error, Warning)
+          $results += @(Invoke-ScriptAnalyzer -Path ./scripts -Recurse -Settings ./PSScriptAnalyzerSettings.psd1 -Severity Error, Warning)
           if ($results.Count -gt 0) {
               $results | Format-Table RuleName, ScriptName, Line, Message -AutoSize | Out-String | Write-Host
               throw "PSScriptAnalyzer reported $($results.Count) finding(s)."
@@ -36,7 +37,7 @@ jobs:
       - name: Parse + analyze
         shell: pwsh
         run: |
-          $paths = @('./MailboxForwardingTool.ps1') + @(Get-ChildItem ./src -Filter '*.ps1' | Select-Object -ExpandProperty FullName)
+          $paths = @('./MailboxForwardingTool.ps1') + @(Get-ChildItem ./src -Filter '*.ps1' | Select-Object -ExpandProperty FullName) + @(Get-ChildItem ./scripts -Filter '*.ps1' | Select-Object -ExpandProperty FullName)
           foreach ($path in $paths) {
               $tokens = $null; $errors = $null
               [void][System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path $path).Path, [ref]$tokens, [ref]$errors)
@@ -61,7 +62,7 @@ jobs:
       - name: Parse + analyze
         shell: powershell
         run: |
-          $paths = @('./MailboxForwardingTool.ps1') + @(Get-ChildItem ./src -Filter '*.ps1' | Select-Object -ExpandProperty FullName)
+          $paths = @('./MailboxForwardingTool.ps1') + @(Get-ChildItem ./src -Filter '*.ps1' | Select-Object -ExpandProperty FullName) + @(Get-ChildItem ./scripts -Filter '*.ps1' | Select-Object -ExpandProperty FullName)
           foreach ($path in $paths) {
               $tokens = $null; $errors = $null
               [void][System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path $path).Path, [ref]$tokens, [ref]$errors)
@@ -86,7 +87,7 @@ jobs:
       - name: Parse + analyze
         shell: pwsh
         run: |
-          $paths = @('./MailboxForwardingTool.ps1') + @(Get-ChildItem ./src -Filter '*.ps1' | Select-Object -ExpandProperty FullName)
+          $paths = @('./MailboxForwardingTool.ps1') + @(Get-ChildItem ./src -Filter '*.ps1' | Select-Object -ExpandProperty FullName) + @(Get-ChildItem ./scripts -Filter '*.ps1' | Select-Object -ExpandProperty FullName)
           foreach ($path in $paths) {
               $tokens = $null; $errors = $null
               [void][System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path $path).Path, [ref]$tokens, [ref]$errors)

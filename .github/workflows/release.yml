@@ -14,12 +14,11 @@ jobs:
       - uses: actions/checkout@v7
 
       - name: Build release zip
+        shell: pwsh
         run: |
-          stage="EXO-mailforwardManager-${GITHUB_REF_NAME}"
-          mkdir "$stage"
-          cp MailboxForwardingTool.ps1 Launch-MailboxForwardingTool.bat config.example.json README.md LICENSE CHANGELOG.md "$stage/"
-          cp -R src "$stage/"
-          zip -r "${stage}.zip" "$stage"
+          $stage = "EXO-mailforwardManager-${env:GITHUB_REF_NAME}"
+          ./scripts/Build-Release.ps1 -OutputDirectory $stage
+          Compress-Archive -Path "$stage/*" -DestinationPath "$stage.zip"
 
       - name: Attach to release
         env:

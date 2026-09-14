@@ -72,7 +72,9 @@ This tool puts a terminal UI over `Set-Mailbox -ForwardingSmtpAddress`: the mail
 
 ## Quick start
 
-Download the zip from [Releases](https://github.com/mardahl/EXO-mailforwardManager/releases/latest), extract, then double-click **`Launch-MailboxForwardingTool.bat`** - it unblocks the files (removes the Mark of the Web) and starts the tool. Or run it yourself:
+Download **`EXO-mailforwardManager-vX.Y.Z.zip`** from [Releases](https://github.com/mardahl/EXO-mailforwardManager/releases/latest) - it contains only `MailboxForwardingTool.ps1` (standalone), `Launch-MailboxForwardingTool.bat`, `QUICKSTART.txt`, and `LICENSE`, not the full source repo. Extract it, then double-click **`Launch-MailboxForwardingTool.bat`** - it unblocks the files (removes the Mark of the Web) and starts the tool. First launch opens the Settings dialog to collect `ForwardingDomain` and `ServiceAccountUPN` and writes `config.json` next to the tool.
+
+To run from source instead (segmented `src/` layout, for development or auditing):
 
 ```powershell
 git clone https://github.com/mardahl/EXO-mailforwardManager.git
@@ -166,7 +168,7 @@ Known limitations:
 
 ## Contributing
 
-Bug reports and PRs are welcome - see [CONTRIBUTING.md](CONTRIBUTING.md) for the ground rules (source layout, PS 5.1 syntax, safety UX) and the lint/test commands. CI enforces PSScriptAnalyzer, a parse check, and the offline test suite on both PowerShell 7 and Windows PowerShell 5.1. Release notes live in [CHANGELOG.md](CHANGELOG.md).
+Bug reports and PRs are welcome - see [CONTRIBUTING.md](CONTRIBUTING.md) for the ground rules (source layout, PS 5.1 syntax, safety UX), the release-bundle build step, and the lint/test commands. CI enforces PSScriptAnalyzer, a parse check, and the offline test suite on both PowerShell 7 and Windows PowerShell 5.1. Release notes live in [CHANGELOG.md](CHANGELOG.md).
 
 ## Security
 

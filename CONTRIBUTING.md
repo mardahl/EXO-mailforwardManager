@@ -88,10 +88,33 @@ anywhere in the entry point or `src/`.
 
 CI runs the same analyzer, a parse check
 (`[System.Management.Automation.Language.Parser]::ParseFile`) on the entry
-script and every file in `src/`, and the full test suite on both
-PowerShell 7 (ubuntu) and Windows PowerShell 5.1 (windows-latest). Live
+script and every file in `src/` and `scripts/`, and the full test suite on
+both PowerShell 7 (ubuntu) and Windows PowerShell 5.1 (windows-latest). Live
 Exchange behavior and real keyboard interaction in a real terminal still
 require manual testing.
+
+## Release bundle
+
+`src/` stays the source of truth for development; the release zip is a
+separate, generated artifact: only `MailboxForwardingTool.ps1` (standalone),
+`Launch-MailboxForwardingTool.bat`, `QUICKSTART.txt`, and `LICENSE` - no
+`src/` folder, no repo bloat. `scripts/Build-Release.ps1` builds it:
+
+```powershell
+.\scripts\Build-Release.ps1 -OutputDirectory .\dist
+```
+
+It replaces the `# === SRC-LOADER-START ===` / `# === SRC-LOADER-END ===`
+block in the root script with the sorted contents of `src/*.ps1`, in the
+same order the root script's own loader dot-sources them, so the generated
+script has no runtime dependency on `src/`. Both marker lines must appear
+exactly once in `MailboxForwardingTool.ps1`, unmodified - the build fails
+loudly if either is missing or duplicated instead of guessing. The release
+workflow (`.github/workflows/release.yml`) runs this script and zips its
+output on every `v*.*.*` tag; `tests/ReleaseBundle.Tests.ps1` checks the
+staged file count, that the bundle parses and defines every `src/` function
+in order, and that it starts standalone (no `src/` present) without ever
+reaching Exchange Online.
 
 ## What to test before a PR
 

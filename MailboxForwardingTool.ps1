@@ -11,9 +11,14 @@ param([switch]$SelfTest, [switch]$DisableWAM, [switch]$Ascii)
 $script:EntryScriptPath = $PSCommandPath
 $script:ScriptDir = $PSScriptRoot
 $script:StartupOptions = @{ SelfTest = [bool]$SelfTest; DisableWAM = [bool]$DisableWAM; Ascii = [bool]$Ascii }
+# scripts/Build-Release.ps1 replaces everything between these two marker
+# lines with the sorted contents of src/*.ps1, inlined in place, for the
+# standalone release bundle. Keep both markers on their own line, verbatim.
+# === SRC-LOADER-START ===
 foreach ($source in (Get-ChildItem (Join-Path $script:ScriptDir 'src') -Filter '*.ps1' | Sort-Object Name)) {
     . $source.FullName
 }
+# === SRC-LOADER-END ===
 
 # MSAL interactive auth (legacy embedded browser fallback) instantiates a COM
 # ActiveX control, which requires a single-threaded apartment (STA). Apartment
@@ -51,7 +56,7 @@ function Main {
     # the module or the network, especially for -SelfTest.
     $script:Config = Get-Config
     if (-not $script:Config -and $SelfTest) {
-        Write-Host 'Configuration missing or invalid. Copy config.example.json to config.json next to the script, fill in ForwardingDomain and ServiceAccountUPN, then rerun.'
+        Write-Host 'Configuration missing or invalid. Run the tool without -SelfTest to open the Settings dialog and configure ForwardingDomain and ServiceAccountUPN, then rerun -SelfTest.'
         return 1
     }
 
