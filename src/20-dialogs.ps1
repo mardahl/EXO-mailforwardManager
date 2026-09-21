@@ -130,6 +130,11 @@ function Write-DialogFrame {
     for ($i = 0; $i -lt $box.BodyCapacity; $i++) {
         $pair = if ($i -lt $BodyLines.Count) { Get-StyledLine -Line $BodyLines[$i] } else { @($t.Row, '') }
         $cell = ConvertTo-DisplayText -Text ("  " + $pair[1]) -Width $innerW
+        if ($i -lt $BodyLines.Count -and ($BodyLines[$i] -is [hashtable]) -and $BodyLines[$i].HotKey) {
+            $hk = [string]$BodyLines[$i].HotKey
+            # $cell = "  " + hotkey + rest; recolor the hotkey char only.
+            $cell = $cell.Substring(0, 2) + $t.HotKey + $hk + $pair[0] + $cell.Substring(2 + $hk.Length)
+        }
         Add-BoxLine -Sb $sb -Row ($box.Y + 1 + $i) -Col $box.X -Content ($border + [string]$g.V + $pair[0] + $cell + $t.Reset + $border + [string]$g.V)
     }
     $hint = ConvertTo-DisplayText -Text " $FooterHint" -Width $innerW
@@ -452,6 +457,48 @@ function Show-ReportDialog {
             'DownArrow' { if ($offset -lt [Math]::Max(0, $wrapped.Count - $box.BodyCapacity)) { $offset++ } }
             'PageUp'    { $offset = [Math]::Max(0, $offset - $box.BodyCapacity) }
             'PageDown'  { $offset = [Math]::Min([Math]::Max(0, $wrapped.Count - $box.BodyCapacity), $offset + $box.BodyCapacity) }
+        }
+    }
+}
+
+function Show-MenuDialog {
+    # Vertical action menu: Up/Down move the highlight (wrapping, skipping
+    # separators and disabled items), Enter returns the highlighted item's
+    # Action, an item's Key returns its Action immediately, Esc/Ctrl+C return
+    # $null. Item: @{ Key; Label; Action; Disabled } or @{ Sep = $true }.
+    param(
+        [Parameter(Mandatory)][string]$Title,
+        [Parameter(Mandatory)][array]$Items,
+        [switch]$Danger
+    )
+    $selectable = @(0..($Items.Count - 1) | Where-Object { -not $Items[$_].Sep -and -not $Items[$_].Disabled })
+    if ($selectable.Count -eq 0) { return $null }
+    $pos = 0  # index into $selectable
+    Clear-DialogKeyQueue
+    while ($true) {
+        $lines = New-Object System.Collections.Generic.List[object]
+        for ($i = 0; $i -lt $Items.Count; $i++) {
+            $it = $Items[$i]
+            if ($it.Sep) { [void]$lines.Add(@{ Text = ([string]$script:G.H * 30); Style = 'Dim' }); continue }
+            $label = "$($it.Key)  $($it.Label)"
+            $style = if ($i -eq $selectable[$pos]) { 'Focus' } elseif ($it.Disabled) { 'Dim' } else { 'Row' }
+            [void]$lines.Add(@{ Text = $label; Style = $style; HotKey = [string]$it.Key })
+        }
+        [void](Write-DialogFrame -Title $Title -BodyLines $lines.ToArray() -FooterHint 'Up/Dn move  Enter pick  Esc close' -Danger:$Danger)
+
+        $key = Read-DialogKey
+        if (($key.Modifiers -band [ConsoleModifiers]::Control) -and $key.Key -eq 'C') { return $null }
+        switch ($key.Key) {
+            'Escape'    { return $null }
+            'Enter'     { return [string]$Items[$selectable[$pos]].Action }
+            'UpArrow'   { $pos = ($pos - 1 + $selectable.Count) % $selectable.Count; continue }
+            'DownArrow' { $pos = ($pos + 1) % $selectable.Count; continue }
+        }
+        if ($key.KeyChar) {
+            $ch = [string][char]::ToUpper($key.KeyChar)
+            foreach ($idx in $selectable) {
+                if ([string]$Items[$idx].Key -eq $ch) { return [string]$Items[$idx].Action }
+            }
         }
     }
 }

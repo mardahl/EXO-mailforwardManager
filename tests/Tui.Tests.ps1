@@ -939,6 +939,57 @@ Test-Case 'Show-SettingsDialog paints validation errors in Danger style' {
     $out = Capture-Console { Show-SettingsDialog -Config $cfg | Out-Null }
     Assert ($out.Contains($script:T.Danger + '  Error: ')) 'Error line must use Danger style.'
 }
+
+# --- Show-MenuDialog -----------------------------------------------------------
+function New-MenuItems {
+    @(
+        @{ Key = 'S'; Label = 'Select / Deselect'; Action = 'ToggleSelect' },
+        @{ Key = 'E'; Label = 'Edit forwarding...'; Action = 'Edit' },
+        @{ Sep = $true },
+        @{ Key = 'P'; Label = 'Preview & apply selected (0)'; Action = 'Apply'; Disabled = $true }
+    )
+}
+function Invoke-Menu([object[]]$KeyList) {
+    New-DispatchState 1 | Out-Null
+    function Get-ConsoleSize { return @(100, 24) }
+    $keys = New-Object System.Collections.Generic.Queue[object]
+    foreach ($k in $KeyList) { [void]$keys.Enqueue($k) }
+    function Read-DialogKey { $keys.Dequeue() }
+    function Clear-DialogKeyQueue { }
+    Show-MenuDialog -Title 'Test' -Items (New-MenuItems)
+}
+
+Test-Case 'Show-MenuDialog Enter returns the highlighted action' {
+    $r = Invoke-Menu @((New-Key ([char]13) Enter))
+    Assert ($r -eq 'ToggleSelect') "Expected ToggleSelect, got '$r'."
+}
+Test-Case 'Show-MenuDialog Down then Enter returns the second action' {
+    $r = Invoke-Menu @((New-Key ([char]0) DownArrow), (New-Key ([char]13) Enter))
+    Assert ($r -eq 'Edit') "Expected Edit, got '$r'."
+}
+Test-Case 'Show-MenuDialog hotkey letter (either case) returns immediately' {
+    Assert ((Invoke-Menu @((New-Key 'e' E))) -eq 'Edit') 'lowercase e must pick Edit.'
+    Assert ((Invoke-Menu @((New-Key 'E' E))) -eq 'Edit') 'uppercase E must pick Edit.'
+}
+Test-Case 'Show-MenuDialog Escape and Ctrl+C return $null' {
+    Assert ($null -eq (Invoke-Menu @((New-Key ([char]27) Escape)))) 'Escape must return $null.'
+    Assert ($null -eq (Invoke-Menu @((New-Key ([char]3) C -Control)))) 'Ctrl+C must return $null.'
+}
+Test-Case 'Show-MenuDialog skips separators and disabled items; Down wraps; disabled hotkey ignored' {
+    # Down from Edit skips Sep and disabled Apply, wraps to first.
+    $r = Invoke-Menu @((New-Key ([char]0) DownArrow), (New-Key ([char]0) DownArrow), (New-Key ([char]13) Enter))
+    Assert ($r -eq 'ToggleSelect') "Down past the end must wrap to the first enabled item, got '$r'."
+    $r = Invoke-Menu @((New-Key ([char]0) UpArrow), (New-Key ([char]13) Enter))
+    Assert ($r -eq 'Edit') "Up from first must wrap to last enabled item, got '$r'."
+    $r = Invoke-Menu @((New-Key 'p' P), (New-Key ([char]27) Escape))
+    Assert ($null -eq $r) 'Hotkey of a disabled item must be ignored.'
+}
+Test-Case 'Show-MenuDialog paints the highlighted item in Focus and hotkeys in HotKey' {
+    $out = Capture-Console { Invoke-Menu @((New-Key ([char]27) Escape)) | Out-Null }
+    Assert ($out.Contains($script:T.FocusBg)) 'Highlighted item must use FocusBg.'
+    Assert ($out.Contains($script:T.HotKey + 'E')) 'Item hotkeys must be painted in HotKey.'
+    Assert ($out.Contains($script:T.RowDim)) 'Disabled item must be dimmed.'
+}
 } finally {
     try {
         [Console]::SetOut($script:OriginalConsoleOut)
