@@ -178,20 +178,22 @@ function Show-SettingsDialog {
         # wrapped line count) is known.
         $probe = Get-DialogBox -BodyHeight 1
         $wrapWidth = [Math]::Max(10, $probe.InnerW - 4)
-        $lines = New-Object System.Collections.Generic.List[string]
+        $lines = New-Object System.Collections.Generic.List[object]
         $fieldLine = @{}
         $fieldLine['ForwardingDomain'] = $lines.Count
-        foreach ($chunk in (Split-DisplayChunks -Text ('Forwarding domain:      ' + $draft.ForwardingDomain + $(if ($focus -eq 0) { '_' } else { '' })) -Width $wrapWidth)) { [void]$lines.Add($chunk) }
+        $chunks = @(Split-DisplayChunks -Text ('Forwarding domain:      ' + $draft.ForwardingDomain + $(if ($focus -eq 0) { '_' } else { '' })) -Width $wrapWidth)
+        foreach ($chunk in $chunks) { [void]$lines.Add(@{ Text = $chunk; Style = $(if ($focus -eq 0) { 'Focus' } else { 'Row' }) }) }
         $fieldLine['ServiceAccountUPN'] = $lines.Count
-        foreach ($chunk in (Split-DisplayChunks -Text ('Service account UPN:    ' + $draft.ServiceAccountUPN + $(if ($focus -eq 1) { '_' } else { '' })) -Width $wrapWidth)) { [void]$lines.Add($chunk) }
+        $chunks = @(Split-DisplayChunks -Text ('Service account UPN:    ' + $draft.ServiceAccountUPN + $(if ($focus -eq 1) { '_' } else { '' })) -Width $wrapWidth)
+        foreach ($chunk in $chunks) { [void]$lines.Add(@{ Text = $chunk; Style = $(if ($focus -eq 1) { 'Focus' } else { 'Row' }) }) }
         $fieldLine['CacheTtlHours'] = $lines.Count
-        [void]$lines.Add('Cache TTL (hours):      ' + $draft.CacheTtlHours + $(if ($focus -eq 2) { '_' } else { '' }))
+        [void]$lines.Add(@{ Text = ('Cache TTL (hours):      ' + $draft.CacheTtlHours + $(if ($focus -eq 2) { '_' } else { '' })); Style = $(if ($focus -eq 2) { 'Focus' } else { 'Row' }) })
         $fieldLine['DeliverToMailboxAndForward'] = $lines.Count
-        [void]$lines.Add('Deliver to mbx+forward: ' + $(if ($draft.DeliverToMailboxAndForward) { '[x]' } else { '[ ]' }))
+        [void]$lines.Add(@{ Text = ('Deliver to mbx+forward: ' + $(if ($draft.DeliverToMailboxAndForward) { '[x]' } else { '[ ]' })); Style = $(if ($focus -eq 3) { 'Focus' } else { 'Row' }) })
         [void]$lines.Add('')
         $fieldLine['Save'] = $lines.Count
-        [void]$lines.Add($(if ($focus -eq 4) { '> Save <' } else { '  Save  ' }))
-        if ($errorText) { [void]$lines.Add(''); [void]$lines.Add("Error: $errorText") }
+        [void]$lines.Add(@{ Text = '[ Save ]'; Style = $(if ($focus -eq 4) { 'ButtonHot' } else { 'Button' }) })
+        if ($errorText) { [void]$lines.Add(''); [void]$lines.Add(@{ Text = "Error: $errorText"; Style = 'Danger' }) }
 
         $box = Get-DialogBox -BodyHeight $lines.Count
         if ($focus -ne $prevFocus) {
@@ -295,22 +297,22 @@ function Show-MailboxDialog {
         $mailboxWrapped = @(Split-DisplayChunks -Text "Mailbox: $($Row.PrimarySmtpAddress)" -Width $wrapWidth)
         $wrapped = @(Split-DisplayChunks -Text $willTo -Width $wrapWidth)
 
-        $lines = New-Object System.Collections.Generic.List[string]
+        $lines = New-Object System.Collections.Generic.List[object]
         $fieldLine = @{}
-        foreach ($chunk in $mailboxWrapped) { [void]$lines.Add($chunk) }
+        foreach ($chunk in $mailboxWrapped) { [void]$lines.Add(@{ Text = $chunk; Style = 'Dim' }) }
         $currentFwd = if ([string]::IsNullOrEmpty($Row.CurrentForwarding)) { '(none)' } else { [string]$Row.CurrentForwarding }
         [void]$lines.Add("Current forwarding:     $currentFwd")
         $onPrem = if ($Row.HasOnPremForwarding) { 'yes' } else { 'no' }
-        [void]$lines.Add("On-prem forwarding:     $onPrem")
+        [void]$lines.Add(@{ Text = "On-prem forwarding:     $onPrem"; Style = $(if ($Row.HasOnPremForwarding) { 'Danger' } else { 'Row' }) })
         $fieldLine['Prefix'] = $lines.Count
-        [void]$lines.Add('Prefix:                 ' + $prefix + $(if ($focus -eq 0) { '_' } else { '' }))
-        foreach ($chunk in $wrapped) { [void]$lines.Add('  -> ' + $chunk) }
+        [void]$lines.Add(@{ Text = ('Prefix:                 ' + $prefix + $(if ($focus -eq 0) { '_' } else { '' })); Style = $(if ($focus -eq 0) { 'Focus' } else { 'Row' }) })
+        foreach ($chunk in $wrapped) { [void]$lines.Add(@{ Text = ('  -> ' + $chunk); Style = 'Dim' }) }
         $fieldLine['DeliverAndStore'] = $lines.Count
-        [void]$lines.Add('Deliver to mbx+forward: ' + $(if ($deliver) { '[x]' } else { '[ ]' }))
+        [void]$lines.Add(@{ Text = ('Deliver to mbx+forward: ' + $(if ($deliver) { '[x]' } else { '[ ]' })); Style = $(if ($focus -eq 1) { 'Focus' } else { 'Row' }) })
         [void]$lines.Add('')
         $fieldLine['Save'] = $lines.Count
-        [void]$lines.Add($(if ($focus -eq 2) { '> Save <' } else { '  Save  ' }))
-        if ($errorText) { [void]$lines.Add(''); [void]$lines.Add("Error: $errorText") }
+        [void]$lines.Add(@{ Text = '[ Save ]'; Style = $(if ($focus -eq 2) { 'ButtonHot' } else { 'Button' }) })
+        if ($errorText) { [void]$lines.Add(''); [void]$lines.Add(@{ Text = "Error: $errorText"; Style = 'Danger' }) }
 
         $box = Get-DialogBox -BodyHeight $lines.Count
         if ($focus -ne $prevFocus) {

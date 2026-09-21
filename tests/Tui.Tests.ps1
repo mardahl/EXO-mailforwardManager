@@ -899,6 +899,46 @@ Test-Case 'Theme exposes every semantic token used by menus, popups and table ce
         Assert ($script:G.ContainsKey($k) -and ([string]$script:G[$k]).Length -eq 1) "Missing box glyph: $k"
     }
 }
+
+# --- Field-editor focus highlighting ------------------------------------------
+Test-Case 'Show-MailboxDialog highlights the focused field and the Save button distinctly' {
+    New-DispatchState 1 | Out-Null
+    function Get-ConsoleSize { return @(100, 24) }
+    $row = [pscustomobject]@{
+        Selected = $false; PrimarySmtpAddress = 'bob@example.com'; CurrentForwarding = ''
+        HasOnPremForwarding = $false; DeliverAndStore = $false
+        ForwardingPrefix = 'bob'; WillForwardTo = 'bob@archive.example.com'
+    }
+    $keys = New-Object System.Collections.Generic.Queue[object]
+    [void]$keys.Enqueue((New-Key ([char]9) Tab))
+    [void]$keys.Enqueue((New-Key ([char]9) Tab))
+    [void]$keys.Enqueue((New-Key ([char]27) Escape))
+    function Read-DialogKey { $keys.Dequeue() }
+    function Clear-DialogKeyQueue { }
+    $out = Capture-Console { Show-MailboxDialog -Row $row -Domain 'archive.example.com' | Out-Null }
+    $frames = $out -split [regex]::Escape($script:T.Border + [string]$script:G.TL)
+    # In ASCII mode, $script:G.TL -eq $script:G.BL -eq '+', so Border+TL matches at both
+    # the top-left and bottom-left box corners (2 matches per paint).
+    # frames[1] = first paint body (focus Prefix), frames[5] = third paint body (focus Save)
+    Assert ($frames[1].Contains($script:T.FocusBg + '  Prefix:')) 'First paint must paint the Prefix line in FocusBg.'
+    Assert ($frames[1].Contains($script:T.Button + '  [ Save ]')) 'Save is an idle Button when not focused.'
+    Assert ($frames[5].Contains($script:T.ButtonHot + '  [ Save ]')) 'Save becomes ButtonHot when focused.'
+    Assert (-not $frames[5].Contains($script:T.FocusBg + '  Prefix:')) 'Prefix loses focus style when Save is focused.'
+}
+
+Test-Case 'Show-SettingsDialog paints validation errors in Danger style' {
+    New-DispatchState 1 | Out-Null
+    function Get-ConsoleSize { return @(100, 24) }
+    $cfg = [pscustomobject]@{ ForwardingDomain = 'invalid domain'; ServiceAccountUPN = 'svc@example.com'; CacheTtlHours = 24; DeliverToMailboxAndForward = $false }
+    $keys = New-Object System.Collections.Generic.Queue[object]
+    foreach ($i in 1..4) { [void]$keys.Enqueue((New-Key ([char]9) Tab)) }
+    [void]$keys.Enqueue((New-Key ([char]13) Enter))
+    [void]$keys.Enqueue((New-Key ([char]27) Escape))
+    function Read-DialogKey { $keys.Dequeue() }
+    function Clear-DialogKeyQueue { }
+    $out = Capture-Console { Show-SettingsDialog -Config $cfg | Out-Null }
+    Assert ($out.Contains($script:T.Danger + '  Error: ')) 'Error line must use Danger style.'
+}
 } finally {
     try {
         [Console]::SetOut($script:OriginalConsoleOut)
