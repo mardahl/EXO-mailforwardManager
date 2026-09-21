@@ -80,6 +80,95 @@ function Invoke-TuiApply {
     $script:UI.Dirty = $true
 }
 
+function Get-TuiSelectedCount { @($script:UI.Items | Where-Object Selected).Count }
+
+function Invoke-TuiAction {
+    # Single dispatcher shared by main-table hotkeys and popup menus so both
+    # paths run identical code.
+    param([Parameter(Mandatory)][string]$Name)
+    switch ($Name) {
+        'ToggleSelect' {
+            if (@($script:UI.View).Count -gt 0) {
+                $row = $script:UI.View[$script:UI.Cursor]
+                $row.Selected = -not $row.Selected
+            }
+        }
+        'Edit' {
+            if (@($script:UI.View).Count -eq 0) { break }
+            $row = $script:UI.View[$script:UI.Cursor]
+            $result = Show-MailboxDialog -Row $row -Domain $script:Config.ForwardingDomain
+            if ($null -ne $result) {
+                Set-MailboxDraft -Row $row -Prefix $result.Prefix -DeliverAndStore $result.DeliverAndStore -Domain $script:Config.ForwardingDomain
+            }
+        }
+        'ToggleKeep' {
+            if (@($script:UI.View).Count -eq 0) { break }
+            $row = $script:UI.View[$script:UI.Cursor]
+            try {
+                Set-MailboxDraft -Row $row -Prefix ([string]$row.ForwardingPrefix) -DeliverAndStore (-not [bool]$row.DeliverAndStore) -Domain $script:Config.ForwardingDomain
+            } catch {
+                Show-ReportDialog -Title 'Keep-copy not changed' -Lines @($_.Exception.Message)
+            }
+        }
+        'SelectVisible' { Set-MailboxSelection -State $script:UI -Mode Visible }
+        'SelectNone'    { Set-MailboxSelection -State $script:UI -Mode None }
+        'Search'        { $script:UI.Searching = $true }
+        'CycleFilter' {
+            $order = @('All', 'HasForward', 'NoForward')
+            $idx = [Array]::IndexOf($order, $script:UI.Filter)
+            $script:UI.Filter = $order[(($idx + 1) % $order.Count)]
+            Update-MailboxView -State $script:UI
+        }
+        'Refresh'  { Invoke-TuiRefresh }
+        'Settings' { Invoke-TuiSettings }
+        'Apply'    { Invoke-TuiApply }
+        'Help' {
+            Show-ReportDialog -Title 'Help' -Lines @(
+                'Enter  action menu for the highlighted mailbox', 'M  global actions menu',
+                'Up/Down/PgUp/PgDn/Home/End  move cursor', 'Space  select/toggle & advance',
+                'A  select all shown   N  clear selection', '/  live search (Enter keep, Esc clear)',
+                'F  cycle filter   R  refresh   S  settings', 'P  preview & apply (explicit Y to confirm)',
+                'Colors: blue = focus, cyan = selected, yellow = key, amber = will change, red = warning, green = keep copy',
+                'Q or Ctrl+C  quit')
+        }
+        'Quit' { $script:UI.Running = $false }
+    }
+    $script:UI.Dirty = $true
+}
+
+function Invoke-TuiRowMenu {
+    if (@($script:UI.View).Count -eq 0) { Invoke-TuiGlobalMenu; return }
+    $row = $script:UI.View[$script:UI.Cursor]
+    $n = Get-TuiSelectedCount
+    $items = @(
+        @{ Key = 'S'; Label = $(if ($row.Selected) { 'Deselect' } else { 'Select' }); Action = 'ToggleSelect' },
+        @{ Key = 'E'; Label = 'Edit forwarding...'; Action = 'Edit' },
+        @{ Key = 'K'; Label = $(if ($row.DeliverAndStore) { 'Keep copy: on  (turn off)' } else { 'Keep copy: off (turn on)' }); Action = 'ToggleKeep' },
+        @{ Sep = $true },
+        @{ Key = 'P'; Label = "Preview & apply selected ($n)"; Action = 'Apply'; Disabled = ($n -eq 0) }
+    )
+    $action = Show-MenuDialog -Title ([string]$row.PrimarySmtpAddress) -Items $items
+    if ($action) { Invoke-TuiAction -Name $action } else { $script:UI.Dirty = $true }
+}
+
+function Invoke-TuiGlobalMenu {
+    $n = Get-TuiSelectedCount
+    $items = @(
+        @{ Key = 'A'; Label = 'Select all visible'; Action = 'SelectVisible' },
+        @{ Key = 'N'; Label = 'Clear selection'; Action = 'SelectNone' },
+        @{ Key = 'F'; Label = "Filter: $($script:UI.Filter) (cycle)"; Action = 'CycleFilter' },
+        @{ Key = '/'; Label = 'Search'; Action = 'Search' },
+        @{ Sep = $true },
+        @{ Key = 'P'; Label = "Preview & apply selected ($n)"; Action = 'Apply'; Disabled = ($n -eq 0) },
+        @{ Key = 'R'; Label = 'Refresh mailboxes'; Action = 'Refresh' },
+        @{ Key = 'S'; Label = 'Settings...'; Action = 'Settings' },
+        @{ Key = '?'; Label = 'Help'; Action = 'Help' },
+        @{ Key = 'Q'; Label = 'Quit'; Action = 'Quit' }
+    )
+    $action = Show-MenuDialog -Title 'Actions' -Items $items
+    if ($action) { Invoke-TuiAction -Name $action } else { $script:UI.Dirty = $true }
+}
+
 function Invoke-TuiKey {
     param([Parameter(Mandatory)][System.ConsoleKeyInfo]$Key)
 
@@ -166,41 +255,23 @@ function Invoke-TuiKey {
             return
         }
         'Enter' {
-            # Enter on the main table only ever opens the row editor - it
-            # must never apply forwarding directly.
-            if (@($script:UI.View).Count -eq 0) { return }
-            $row = $script:UI.View[$script:UI.Cursor]
-            $result = Show-MailboxDialog -Row $row -Domain $script:Config.ForwardingDomain
-            if ($null -ne $result) {
-                Set-MailboxDraft -Row $row -Prefix $result.Prefix -DeliverAndStore $result.DeliverAndStore -Domain $script:Config.ForwardingDomain
-            }
-            $script:UI.Dirty = $true
+            # Enter opens the action menu; it never applies forwarding directly.
+            Invoke-TuiRowMenu
             return
         }
         'Escape' { return }
     }
 
     switch ([char]::ToUpper($Key.KeyChar)) {
-        'A' { Set-MailboxSelection -State $script:UI -Mode Visible; $script:UI.Dirty = $true; return }
-        'N' { Set-MailboxSelection -State $script:UI -Mode None; $script:UI.Dirty = $true; return }
-        '/' { $script:UI.Searching = $true; $script:UI.Dirty = $true; return }
-        'F' {
-            $order = @('All', 'HasForward', 'NoForward')
-            $idx = [Array]::IndexOf($order, $script:UI.Filter)
-            $script:UI.Filter = $order[(($idx + 1) % $order.Count)]
-            Update-MailboxView -State $script:UI
-            $script:UI.Dirty = $true
-            return
-        }
-        'R' { Invoke-TuiRefresh; return }
-        'S' { Invoke-TuiSettings; return }
-        'P' { Invoke-TuiApply; return }
-        '?' { Show-ReportDialog -Title 'Help' -Lines @(
-                'Up/Down/PgUp/PgDn/Home/End  move cursor', 'Space  select/toggle & advance',
-                'A  select all shown   N  clear selection', '/  live search (Enter keep, Esc clear)',
-                'F  cycle filter   Enter  edit row', 'R  refresh   S  settings   P  preview & apply',
-                'Q or Ctrl+C  quit')
-            return }
-        'Q' { $script:UI.Running = $false; return }
+        'A' { Invoke-TuiAction -Name 'SelectVisible'; return }
+        'N' { Invoke-TuiAction -Name 'SelectNone'; return }
+        '/' { Invoke-TuiAction -Name 'Search'; return }
+        'F' { Invoke-TuiAction -Name 'CycleFilter'; return }
+        'R' { Invoke-TuiAction -Name 'Refresh'; return }
+        'S' { Invoke-TuiAction -Name 'Settings'; return }
+        'P' { Invoke-TuiAction -Name 'Apply'; return }
+        'M' { Invoke-TuiGlobalMenu; return }
+        '?' { Invoke-TuiAction -Name 'Help'; return }
+        'Q' { Invoke-TuiAction -Name 'Quit'; return }
     }
 }

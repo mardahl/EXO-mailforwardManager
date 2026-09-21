@@ -263,25 +263,92 @@ Test-Case 'Space selects the cursor row and advances the cursor; Enter never app
 
     $script:ApplyCalls = 0
     function Set-MailboxForwards { $script:ApplyCalls++ }
-    function Show-MailboxDialog { return $null }
+    function Show-MenuDialog { return $null }
     Invoke-TuiKey -Key (New-Key ([char]13) Enter)
     Assert ($script:ApplyCalls -eq 0) 'Enter on the main table must never apply.'
 }
 
-Test-Case 'Enter opens the row editor; a canceled editor preserves the row unchanged' {
+Test-Case 'Enter opens the row menu; Edit with a canceled editor preserves the row unchanged' {
     $items = New-DispatchState
     $before = $items[0].WillForwardTo
+    $script:MenuTitle = ''
+    function Show-MenuDialog { param($Title, $Items) $script:MenuTitle = $Title; return 'Edit' }
     function Show-MailboxDialog { return $null }
     Invoke-TuiKey -Key (New-Key ([char]13) Enter)
+    Assert ($script:MenuTitle -eq 'user0@example.com') 'Row menu title must be the mailbox address.'
     Assert ($items[0].WillForwardTo -eq $before) 'Canceled editor must leave the row untouched.'
 }
 
-Test-Case 'Enter with an accepted editor result commits via the real Set-MailboxDraft' {
+Test-Case 'Row menu Edit with an accepted editor result commits via the real Set-MailboxDraft' {
     $items = New-DispatchState
+    function Show-MenuDialog { return 'Edit' }
     function Show-MailboxDialog { return @{ Prefix = 'newprefix'; DeliverAndStore = $true } }
     Invoke-TuiKey -Key (New-Key ([char]13) Enter)
     Assert ($items[0].WillForwardTo -eq 'newprefix@archive.example.com') 'Accepted editor result must update WillForwardTo via Set-MailboxDraft.'
     Assert ($items[0].DeliverAndStore -eq $true) 'Accepted editor result must update DeliverAndStore.'
+}
+
+Test-Case 'Row menu ToggleSelect flips selection without moving the cursor' {
+    $items = New-DispatchState 3
+    function Show-MenuDialog { return 'ToggleSelect' }
+    Invoke-TuiKey -Key (New-Key ([char]13) Enter)
+    Assert $items[0].Selected 'ToggleSelect must select the row.'
+    Assert ($script:UI.Cursor -eq 0) 'ToggleSelect must not advance the cursor.'
+    Invoke-TuiKey -Key (New-Key ([char]13) Enter)
+    Assert (-not $items[0].Selected) 'Second ToggleSelect must deselect.'
+}
+
+Test-Case 'Row menu ToggleKeep flips DeliverAndStore through Set-MailboxDraft' {
+    $items = New-DispatchState
+    $items[0].DeliverAndStore = $false
+    function Show-MenuDialog { return 'ToggleKeep' }
+    Invoke-TuiKey -Key (New-Key ([char]13) Enter)
+    Assert ($items[0].DeliverAndStore -eq $true) 'ToggleKeep must set keep-copy on.'
+}
+
+Test-Case 'Row menu disables Preview when nothing is selected and enables it with a count' {
+    $items = New-DispatchState 3
+    $script:MenuItems = $null
+    function Show-MenuDialog { param($Title, $Items) $script:MenuItems = $Items; return $null }
+    Invoke-TuiKey -Key (New-Key ([char]13) Enter)
+    $p = $script:MenuItems | Where-Object { $_.Action -eq 'Apply' }
+    Assert ($p.Disabled -eq $true -and $p.Label -like '*(0)') 'Preview must be disabled with (0).'
+    $items[1].Selected = $true; $items[2].Selected = $true
+    Invoke-TuiKey -Key (New-Key ([char]13) Enter)
+    $p = $script:MenuItems | Where-Object { $_.Action -eq 'Apply' }
+    Assert (-not $p.Disabled -and $p.Label -like '*(2)') 'Preview must be enabled with (2).'
+}
+
+Test-Case 'M opens the global menu; Quit stops the loop; Escape leaves state untouched' {
+    New-DispatchState 2 | Out-Null
+    $script:MenuTitle = ''
+    function Show-MenuDialog { param($Title, $Items) $script:MenuTitle = $Title; return 'Quit' }
+    $script:UI.Running = $true
+    Invoke-TuiKey -Key (New-Key 'm' M)
+    Assert ($script:MenuTitle -eq 'Actions') 'Global menu title must be Actions.'
+    Assert (-not $script:UI.Running) 'Quit action must stop the loop.'
+    $script:UI.Running = $true
+    function Show-MenuDialog { return $null }
+    Invoke-TuiKey -Key (New-Key 'm' M)
+    Assert $script:UI.Running 'Escaped menu must change nothing.'
+}
+
+Test-Case 'Global menu SelectVisible and CycleFilter reuse the hotkey handlers' {
+    $items = New-DispatchState 3
+    function Show-MenuDialog { return 'SelectVisible' }
+    Invoke-TuiKey -Key (New-Key 'm' M)
+    Assert (@($items | Where-Object Selected).Count -eq 3) 'SelectVisible must select all visible rows.'
+    function Show-MenuDialog { return 'CycleFilter' }
+    Invoke-TuiKey -Key (New-Key 'm' M)
+    Assert ($script:UI.Filter -eq 'HasForward') 'CycleFilter must advance the filter.'
+}
+
+Test-Case 'Enter on an empty view opens the global menu instead of a row menu' {
+    New-DispatchState 0 | Out-Null
+    $script:MenuTitle = ''
+    function Show-MenuDialog { param($Title, $Items) $script:MenuTitle = $Title; return $null }
+    Invoke-TuiKey -Key (New-Key ([char]13) Enter)
+    Assert ($script:MenuTitle -eq 'Actions') 'Empty view Enter must open the global menu.'
 }
 
 Test-Case 'Search mode captures letters; they never trigger main-table commands' {
@@ -325,6 +392,7 @@ Test-Case 'F cycles the filter and A/N select/clear the visible set' {
 
 Test-Case 'Empty view tolerates every navigation key without throwing' {
     New-DispatchState 0 | Out-Null
+    function Show-MenuDialog { return $null }
     foreach ($k in @(
         (New-Key ([char]0) UpArrow), (New-Key ([char]0) DownArrow), (New-Key ([char]0) PageUp),
         (New-Key ([char]0) PageDown), (New-Key ([char]0) Home), (New-Key ([char]0) End),
