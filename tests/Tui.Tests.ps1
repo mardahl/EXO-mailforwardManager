@@ -840,7 +840,7 @@ Test-Case 'Show-SettingsDialog: a 200+ char domain stays inspectable and Save st
 }
 
 Test-Case 'Show-MailboxDialog: invalid long prefix at 80x20 anchors error tail then PageUp captures earlier content distinct from tail' {
-    $longPrefix = 'bad prefix ' + ('x' * 300)
+    $longPrefix = 'bad prefix ' + ('x' * 900)
     $row = [pscustomobject]@{
         Selected = $false; PrimarySmtpAddress = 'user@example.com'; CurrentForwarding = ''
         HasOnPremForwarding = $false; DeliverAndStore = $false; ForwardingPrefix = $longPrefix; WillForwardTo = ''
@@ -869,7 +869,7 @@ Test-Case 'Show-MailboxDialog: invalid long prefix at 80x20 anchors error tail t
 
 Test-Case 'Show-SettingsDialog: invalid long domain at 80x20 anchors error tail then PageUp captures earlier content distinct from tail' {
     $config = [pscustomobject]@{
-        ForwardingDomain           = ('invalid domain ' + ('d' * 350))
+        ForwardingDomain           = ('invalid domain ' + ('d' * 900))
         ServiceAccountUPN          = 'admin@example.com'
         CacheTtlHours              = 24
         DeliverToMailboxAndForward = $false
@@ -1121,6 +1121,31 @@ Test-Case 'Get-PreviewFrame colors action tags Set/Overwrite/Skip without changi
     Assert ($r.Frame.Contains($script:T.RowDim + '[Skip]')) 'Skip must be dim.'
 }
 
+
+# --- Dialog width and progress modals -----------------------------------------
+Test-Case 'Get-DialogBox uses ~80% of the screen width, clamped to w-4' {
+    function Get-ConsoleSize { return @(120, 30) }
+    $box = Get-DialogBox -BodyHeight 3
+    Assert ($box.W -eq 96) "120 cols must give a 96-wide box, got $($box.W)."
+    function Get-ConsoleSize { return @(80, 20) }
+    $box = Get-DialogBox -BodyHeight 3
+    Assert ($box.W -eq 64) "80 cols must give a 64-wide box, got $($box.W)."
+    function Get-ConsoleSize { return @(50, 20) }
+    $box = Get-DialogBox -BodyHeight 3
+    Assert ($box.W -eq 46) "Narrow screens clamp to w-4, got $($box.W)."
+}
+Test-Case 'Show-FetchProgress and Show-OperationProgress render bordered modals with a bar' {
+    New-DispatchState 2 | Out-Null
+    function Get-ConsoleSize { return @(100, 24) }
+    $out = Capture-Console { Show-FetchProgress -Progress @{ Status = 'Fetching'; Count = 300 } }
+    Assert ($out.Contains($script:T.Border + [string]$script:G.TL)) 'Fetch progress must draw a box.'
+    Assert ($out.Contains('Fetching (300 so far)')) 'Fetch progress must show status and count.'
+    $out = Capture-Console { Show-OperationProgress -Progress @{ Index = 1; Total = 4; Mailbox = 'a@x.com' } }
+    Assert ($out.Contains('Applying forwarding 1/4')) 'Apply progress title must show index/total.'
+    Assert ($out.Contains([string]$script:G.Bar)) 'Apply progress must draw a filled bar segment.'
+    Assert ($out.Contains(' 25%')) 'Apply progress must show the percentage.'
+    Assert ($out.Contains($script:T.FocusBg + '  a@x.com')) 'Current mailbox must be highlighted.'
+}
 } finally {
     try {
         [Console]::SetOut($script:OriginalConsoleOut)

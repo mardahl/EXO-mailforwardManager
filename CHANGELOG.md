@@ -6,6 +6,15 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.3.0-rc.2] - 2026-09-21
+
+- Change: popups now use ~80% of the terminal width (minimum 50 columns)
+  instead of a fixed 50, so long forwarding domains, UPNs and error
+  messages no longer wrap on typical terminals.
+- Change: Refresh and Apply show a bordered progress modal (status line and
+  running count for refresh; filled bar, percentage and current mailbox
+  for apply) instead of a bare text line drawn over the table.
+
 ## [1.3.0-rc.1] - 2026-09-21
 
 Release candidate for operator testing of the reworked TUI.

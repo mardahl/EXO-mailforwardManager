@@ -22,7 +22,9 @@ function Get-DialogBox {
     param([Parameter(Mandatory)][int]$BodyHeight, [int]$MinWidth = 50)
     $size = Get-ConsoleSize
     $w = $size[0]; $h = $size[1]
-    $boxW = [Math]::Min([Math]::Max($MinWidth, 40), [Math]::Max(20, $w - 4))
+    # Boxes take ~80% of the screen (never below MinWidth, never past w-4)
+    # so long domains/UPNs and error text stay on one line on normal terminals.
+    $boxW = [Math]::Min([Math]::Max($MinWidth, [int]($w * 0.8)), [Math]::Max(20, $w - 4))
     $maxBodyCap = [Math]::Max(1, $h - 5)
     $bodyH = [Math]::Max(1, [Math]::Min($BodyHeight, $maxBodyCap))
     $boxH = $bodyH + 3
@@ -182,7 +184,7 @@ function Show-SettingsDialog {
         # gives InnerW before the real body height (which depends on the
         # wrapped line count) is known.
         $probe = Get-DialogBox -BodyHeight 1
-        $wrapWidth = [Math]::Max(10, $probe.InnerW - 4)
+        $wrapWidth = [Math]::Max(10, $probe.InnerW)
         $lines = New-Object System.Collections.Generic.List[object]
         $fieldLine = @{}
         $fieldLine['ForwardingDomain'] = $lines.Count
@@ -298,7 +300,7 @@ function Show-MailboxDialog {
     while ($true) {
         $willTo = if ($prefix) { "$prefix@$Domain" } else { '' }
         $probe = Get-DialogBox -BodyHeight 1
-        $wrapWidth = [Math]::Max(10, $probe.InnerW - 4)
+        $wrapWidth = [Math]::Max(10, $probe.InnerW)
         $mailboxWrapped = @(Split-DisplayChunks -Text "Mailbox: $($Row.PrimarySmtpAddress)" -Width $wrapWidth)
         $wrapped = @(Split-DisplayChunks -Text $willTo -Width $wrapWidth)
 
@@ -504,36 +506,45 @@ function Show-MenuDialog {
     }
 }
 
+function Get-ProgressBar {
+    param([Parameter(Mandatory)][int]$Index, [Parameter(Mandatory)][int]$Total, [Parameter(Mandatory)][int]$Width)
+    $total = [Math]::Max(1, $Total)
+    $fill = [Math]::Min($Width, [int]($Width * $Index / $total))
+    return ([string]$script:G.Bar * $fill) + ([string]$script:G.H * ($Width - $fill))
+}
+
 function Show-FetchProgress {
-    # Busy indicator for Get-MailboxList's -OnProgress callback (initial
-    # state and 100-record boundaries). Total mailbox count is unknown until
-    # the fetch finishes, so this is a single status line - no bar, no
-    # spinner, no worker thread.
+    # Busy modal for Get-MailboxList's -OnProgress callback (initial state
+    # and 100-record boundaries). Total count is unknown until the fetch
+    # finishes, so this shows a status line and a running count - no bar.
+    # No key reads: safe to call synchronously from the callback.
     param([Parameter(Mandatory)][hashtable]$Progress)
-    $size = Get-ConsoleSize
-    $text = " $($Progress.Status)"
+    $text = [string]$Progress.Status
     if ($Progress.Count) { $text += " ($($Progress.Count) so far)" }
-    $sb = New-Object System.Text.StringBuilder
-    Add-FrameLine -Sb $sb -Row ([Math]::Max(1, [int]($size[1] / 2))) -Content ($script:T.HeaderHi + (ConvertTo-DisplayText -Text $text -Width $size[0]))
-    [Console]::Write($sb.ToString())
+    [void](Write-DialogFrame -Title 'Refreshing mailboxes' -BodyLines @(
+        '',
+        @{ Text = $text; Style = 'Focus' },
+        '',
+        @{ Text = 'Please wait - keys are ignored until the fetch completes.'; Style = 'Dim' }
+    ) -FooterHint 'Working...')
 }
 
 function Show-OperationProgress {
-    # Draws a single progress line only - no key reads, so it is safe to
-    # call synchronously from Set-MailboxForwards's -OnProgress callback
-    # once per row without blocking the apply loop.
+    # Progress modal for Set-MailboxForwards's -OnProgress callback, once
+    # per row. No key reads, so it never blocks the apply loop.
     param([Parameter(Mandatory)][hashtable]$Progress)
-    $size = Get-ConsoleSize
-    $w = $size[0]; $h = $size[1]
     $index = [int]$Progress.Index
     $total = [Math]::Max(1, [int]$Progress.Total)
-    $mailbox = [string]$Progress.Mailbox
     $pct = [int](100 * $index / $total)
-    $barW = [Math]::Max(4, [Math]::Min(40, $w - 24))
-    $fill = [Math]::Min($barW, [int]($barW * $index / $total))
-    $bar = ('#' * $fill) + ('-' * ($barW - $fill))
-    $text = " Applying $index/$total [$bar] $pct% - $mailbox"
-    $sb = New-Object System.Text.StringBuilder
-    Add-FrameLine -Sb $sb -Row ([Math]::Max(1, [int]($h / 2))) -Content ($script:T.HeaderHi + (ConvertTo-DisplayText -Text $text -Width $w))
-    [Console]::Write($sb.ToString())
+    $probe = Get-DialogBox -BodyHeight 1
+    $barW = [Math]::Max(10, $probe.InnerW - 8)
+    $bar = Get-ProgressBar -Index $index -Total $total -Width $barW
+    [void](Write-DialogFrame -Title "Applying forwarding $index/$total" -BodyLines @(
+        '',
+        @{ Text = "$bar $($pct.ToString().PadLeft(3))%"; Style = 'Row' },
+        '',
+        @{ Text = [string]$Progress.Mailbox; Style = 'Focus' },
+        '',
+        @{ Text = 'Do not close the window; a report follows when done.'; Style = 'Dim' }
+    ) -FooterHint 'Working...')
 }

@@ -36,13 +36,13 @@ $script:UI = @{
 if ($script:StartupOptions -and $script:StartupOptions.Ascii) {
     $script:G = @{
         H = '-'; V = '|'; Ell = '..'; ChkOn = '[x]'; ChkOff = '[ ]'; Arrow = '->'
-        TL = '+'; TR = '+'; BL = '+'; BR = '+'
+        TL = '+'; TR = '+'; BL = '+'; BR = '+'; Bar = '#'
     }
 } else {
     $script:G = @{
         H = ([char]0x2500); V = ([char]0x2502); Ell = ([char]0x2026)
         ChkOn = ('[' + [char]0x25A0 + ']'); ChkOff = '[ ]'; Arrow = ([char]0x2192)
-        TL = ([char]0x250C); TR = ([char]0x2510); BL = ([char]0x2514); BR = ([char]0x2518)
+        TL = ([char]0x250C); TR = ([char]0x2510); BL = ([char]0x2514); BR = ([char]0x2518); Bar = ([char]0x2588)
     }
 }
 
