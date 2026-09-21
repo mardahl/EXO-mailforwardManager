@@ -6,6 +6,24 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.3.0-rc.1] - 2026-09-21
+
+Release candidate for operator testing of the reworked TUI.
+
+- Add: `Enter` on a mailbox opens an action menu (Select/Deselect, Edit
+  forwarding, Keep copy on/off, Preview & apply). `M` opens a global
+  Actions menu (select all, clear, filter, search, preview, refresh,
+  settings, help, quit). Menu items show their hotkey; the same letters
+  still work directly on the table.
+- Change: all popups (Settings, Edit forwarding, Help, menus) render as a
+  bordered box over a dimmed copy of the mailbox table. The focused field,
+  Save button and highlighted menu item share one blue highlight style.
+- Change: table cells carry semantic color - cyan selected rows, amber
+  proposed forwarding when it differs from current, green Keep=Yes, red
+  Warn flag; footer and popup hints paint hotkeys yellow. Preview marks
+  `[Set]` green, `[Overwrite]` amber, `[Skip]` dim; `Y` green, `N/Esc` red.
+- Docs: README footer and key list updated; color legend added.
+
 ## [1.2.1] - 2026-09-14
 
 - Add: `scripts/Build-Release.ps1` builds the release bundle (standalone
