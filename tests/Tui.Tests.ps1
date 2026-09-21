@@ -687,12 +687,17 @@ Test-Case 'Get-DialogScrollOffset clamps to the maximum valid offset' {
 # --- Dialog scroll capture: real Show-MailboxDialog/Show-SettingsDialog frames,
 # muting each captured frame's ANSI to a StringWriter instead of the console. --
 function Get-CapturedDialogFrames([scriptblock]$Action) {
+    # Write-DialogFrame no longer clears the screen (it draws over a
+    # Get-BackdropFrame redraw each call), so successive frames are no
+    # longer delimited by ESC[2J. Every full redraw still starts by moving
+    # the cursor to row 1 col 1 (the backdrop's first line), so split on
+    # that landmark instead.
     $writer = New-Object System.IO.StringWriter
     $prev = [Console]::Out
     [Console]::SetOut($writer)
     try { & $Action } finally { [Console]::SetOut($prev) }
     $text = $writer.ToString()
-    return @($text -split ([regex]::Escape("$([char]27)[2J")) | Where-Object { $_ })
+    return @($text -split ([regex]::Escape("$([char]27)[1;1H")) | Where-Object { $_ })
 }
 
 Test-Case 'Show-MailboxDialog: a 200+ char address stays inspectable and Save stays reachable at 80x20' {
@@ -818,11 +823,71 @@ Test-Case 'Show-SettingsDialog: invalid long domain at 80x20 anchors error tail 
     $errorTailFrame = $frames[5]
     $pagedUpFrame = $frames[6]
 
-    Assert ($errorTailFrame -match 'Error: ForwardingDomain is not a valid hostname') 'Validation failure must anchor the frame to show the error message at the tail.'
+    # The bordered popup's inner width (box width minus the two border
+    # columns) is narrower than the old borderless box, so this long error
+    # line is now ellipsis-truncated a few characters earlier; match a
+    # prefix that still uniquely identifies the validation error.
+    Assert ($errorTailFrame -match 'Error: ForwardingDomain is not a valid hostn') 'Validation failure must anchor the frame to show the error message at the tail.'
     Assert ($errorTailFrame -notmatch 'Forwarding domain:      invalid domain') 'Error tail frame must have scrolled the initial domain label line out of view.'
 
     Assert ($pagedUpFrame -match 'Forwarding domain:      invalid domain') 'PageUp after validation error must capture earlier content instead of remaining stuck at tail.'
-    Assert ($pagedUpFrame -notmatch 'Error: ForwardingDomain is not a valid hostname') 'Paged-up frame must be distinct from the tail error frame.'
+    Assert ($pagedUpFrame -notmatch 'Error: ForwardingDomain is not a valid hostn') 'Paged-up frame must be distinct from the tail error frame.'
+}
+
+# --- Popup frame: border, backdrop, styled lines, key hints -------------------
+function Capture-Console([scriptblock]$Action) {
+    $writer = New-Object System.IO.StringWriter
+    $prev = [Console]::Out
+    [Console]::SetOut($writer)
+    try { & $Action } finally { [Console]::SetOut($prev) }
+    $writer.ToString()
+}
+
+Test-Case 'Format-KeyHint colors key tokens and leaves labels in footer text color' {
+    $out = Format-KeyHint -Text 'Tab next  Esc cancel  Y apply'
+    Assert ($out.Contains($script:T.HotKey + 'Tab')) 'Tab must be a hotkey token.'
+    Assert ($out.Contains($script:T.HotKey + 'Esc')) 'Esc must be a hotkey token.'
+    Assert ($out.Contains($script:T.HotKey + 'Y')) 'Single capital letters are hotkey tokens.'
+    Assert ($out.Contains($script:T.FootTxt + 'next')) 'Labels stay in FootTxt.'
+}
+
+Test-Case 'Get-BackdropFrame renders the table with only the Backdrop style' {
+    $items = New-DispatchState 3
+    $items[0].Selected = $true
+    function Get-ConsoleSize { return @(100, 24) }
+    $frame = Get-BackdropFrame
+    $sgr = [regex]::Matches($frame, "$([char]27)\[[0-9;]*m") | ForEach-Object { $_.Value } | Sort-Object -Unique
+    foreach ($s in $sgr) {
+        Assert ($s -eq $script:T.Backdrop -or $s -eq $script:T.Reset) "Backdrop leaked style: $s"
+    }
+    Assert ($frame.Contains('user0@example.com')) 'Backdrop must still show table content.'
+}
+
+Test-Case 'Write-DialogFrame draws a bordered box with title, styled body and hint over the backdrop' {
+    New-DispatchState 2 | Out-Null
+    function Get-ConsoleSize { return @(100, 24) }
+    $out = Capture-Console {
+        Write-DialogFrame -Title 'Demo' -BodyLines @('plain', @{ Text = 'focused'; Style = 'Focus' }, @{ Text = '[ Save ]'; Style = 'ButtonHot' }) -FooterHint 'Esc cancel' | Out-Null
+    }
+    Assert (-not $out.Contains("$([char]27)[2J")) 'Popup must not clear the screen; it draws over the backdrop.'
+    Assert ($out.Contains($script:T.Backdrop)) 'Backdrop must be drawn.'
+    Assert ($out.Contains($script:T.Border + [string]$script:G.TL)) 'Top-left corner must be in Border color.'
+    Assert ($out.Contains(' Demo ')) 'Title must be in the top border.'
+    Assert ($out.Contains($script:T.FocusBg)) 'Focus style must be emitted for the focused line.'
+    Assert ($out.Contains($script:T.ButtonHot)) 'ButtonHot style must be emitted.'
+    Assert ($out.Contains($script:T.HotKey + 'Esc')) 'Footer hint must go through Format-KeyHint.'
+    Assert ($out.Contains([string]$script:G.BR)) 'Bottom-right corner must be drawn.'
+}
+
+Test-Case 'Write-DialogFrame -Danger uses the danger border and styled text is sanitized' {
+    New-DispatchState 1 | Out-Null
+    function Get-ConsoleSize { return @(100, 24) }
+    $esc = [string][char]27
+    $out = Capture-Console {
+        Write-DialogFrame -Title 'Bad' -BodyLines @(@{ Text = ("x" + $esc + "[31mINJECT"); Style = 'Focus' }) -Danger | Out-Null
+    }
+    Assert ($out.Contains($script:T.BorderDanger + [string]$script:G.TL)) 'Danger popups use BorderDanger.'
+    Assert (-not $out.Contains($esc + '[31m')) 'Body text must be sanitized before styling.'
 }
 
 # --- Theme tokens and glyphs --------------------------------------------------

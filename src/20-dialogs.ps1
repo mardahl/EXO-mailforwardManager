@@ -23,9 +23,9 @@ function Get-DialogBox {
     $size = Get-ConsoleSize
     $w = $size[0]; $h = $size[1]
     $boxW = [Math]::Min([Math]::Max($MinWidth, 40), [Math]::Max(20, $w - 4))
-    $maxBodyCap = [Math]::Max(1, $h - 6)
+    $maxBodyCap = [Math]::Max(1, $h - 5)
     $bodyH = [Math]::Max(1, [Math]::Min($BodyHeight, $maxBodyCap))
-    $boxH = $bodyH + 4
+    $boxH = $bodyH + 3
     $x = [Math]::Max(1, [int](($w - $boxW) / 2) + 1)
     $y = [Math]::Max(1, [int](($h - $boxH) / 2) + 1)
     # BodyCapacity is the actual per-call clamped body height ($bodyH), not the
@@ -55,30 +55,99 @@ function Get-DialogScrollOffset {
     return [Math]::Max(0, [Math]::Min($Offset, $maxOffset))
 }
 
+function Format-KeyHint {
+    # Colors key tokens (Tab, Esc, Y, single capitals, ...) in HotKey and the
+    # remaining words in FootTxt so the operator can spot "press this" at a
+    # glance. Input is trusted static hint text, not user data.
+    param([Parameter(Mandatory)][AllowEmptyString()][string]$Text)
+    $t = $script:T
+    $sb = New-Object System.Text.StringBuilder
+    foreach ($tok in ($Text -split '(\s+)')) {
+        if ($tok -match '^\s+$' -or $tok -eq '') { [void]$sb.Append($t.FootTxt + $tok); continue }
+        if ($tok -match '^(Tab|Space|Enter|Esc|PgUp/PgDn|Up/Dn|Up/Down|Up/Down/PgUp/PgDn|Y|N|N/Esc|Enter/Esc|M|[A-Z?/])$') {
+            [void]$sb.Append($t.FootBg + $t.HotKey + $tok)
+        } else {
+            [void]$sb.Append($t.FootTxt + $tok)
+        }
+    }
+    return $sb.ToString()
+}
+
+function Get-BackdropFrame {
+    # The main table, re-rendered for the current size with every SGR
+    # stripped and repainted in Backdrop gray. Popups draw on top of this so
+    # the operator still sees the list they were working in.
+    $size = Get-ConsoleSize
+    $frame = Get-MailboxFrame -State $script:UI -Width $size[0] -Height $size[1]
+    $plain = [regex]::Replace($frame, "$script:ESC\[[0-9;]*m", '')
+    # Every line starts with the absolute cursor move ESC[row;1H; put the
+    # backdrop color right after it so the whole row is dimmed.
+    return [regex]::Replace($plain, "($script:ESC\[\d+;1H)", ('$1' + $script:T.Backdrop))
+}
+
+function Get-StyledLine {
+    # Resolve a body line (string or @{Text;Style}) to (style, text). Text is
+    # sanitized by the caller via ConvertTo-DisplayText *before* the style is
+    # prefixed, so this only maps names to SGR strings.
+    param([Parameter(Mandatory)][AllowNull()]$Line)
+    $t = $script:T
+    if ($Line -is [hashtable]) {
+        $style = switch ([string]$Line.Style) {
+            'Focus'     { $t.FocusBg }
+            'Button'    { $t.Button }
+            'ButtonHot' { $t.ButtonHot }
+            'Dim'       { $t.RowDim }
+            'Danger'    { $t.Danger }
+            default     { $t.Row }
+        }
+        return @($style, [string]$Line.Text)
+    }
+    return @($t.Row, [string]$Line)
+}
+
 function Write-DialogFrame {
-    # Draws a titled box with body text lines and a footer hint. Recomputes
+    # Draws a bordered, titled box over the dimmed main table. Body lines are
+    # strings or @{ Text; Style } hashtables (see Get-StyledLine). Recomputes
     # geometry from the current console size on every call, so a resize
     # between keystrokes is picked up on the next repaint.
     param(
         [Parameter(Mandatory)][string]$Title,
-        [Parameter(Mandatory)][AllowEmptyCollection()][AllowEmptyString()][string[]]$BodyLines,
+        [Parameter(Mandatory)][AllowEmptyCollection()][AllowEmptyString()][object[]]$BodyLines,
         [string]$FooterHint = '',
         [switch]$Danger
     )
-    $t = $script:T
+    $t = $script:T; $g = $script:G
     $box = Get-DialogBox -BodyHeight $BodyLines.Count
+    $border = if ($Danger) { $t.BorderDanger } else { $t.Border }
+    $innerW = $box.W - 2
     $sb = New-Object System.Text.StringBuilder
-    [void]$sb.Append("$script:ESC[2J")
-    $border = if ($Danger) { $t.Danger } else { $t.HeaderHi }
-    Add-FrameLine -Sb $sb -Row $box.Y -Content ($border + (ConvertTo-DisplayText -Text " $Title " -Width $box.W))
+    [void]$sb.Append((Get-BackdropFrame))
+
+    $titleText = ConvertTo-DisplayText -Text " $Title " -Width ([Math]::Min($innerW - 2, $Title.Length + 2))
+    $topFill = [string]$g.H * [Math]::Max(0, $innerW - 1 - $titleText.Length)
+    Add-BoxLine -Sb $sb -Row $box.Y -Col $box.X -Content ($border + [string]$g.TL + [string]$g.H + $titleText + $topFill + [string]$g.TR)
+
     for ($i = 0; $i -lt $box.BodyCapacity; $i++) {
-        $text = if ($i -lt $BodyLines.Count) { [string]$BodyLines[$i] } else { '' }
-        Add-FrameLine -Sb $sb -Row ($box.Y + 1 + $i) -Content ($t.Row + (ConvertTo-DisplayText -Text "  $text" -Width $box.W))
+        $pair = if ($i -lt $BodyLines.Count) { Get-StyledLine -Line $BodyLines[$i] } else { @($t.Row, '') }
+        $cell = ConvertTo-DisplayText -Text ("  " + $pair[1]) -Width $innerW
+        Add-BoxLine -Sb $sb -Row ($box.Y + 1 + $i) -Col $box.X -Content ($border + [string]$g.V + $pair[0] + $cell + $t.Reset + $border + [string]$g.V)
     }
-    Add-FrameLine -Sb $sb -Row ($box.Y + 1 + $box.BodyCapacity) -Content ($t.FootTxt + (ConvertTo-DisplayText -Text " $FooterHint" -Width $box.W))
+    $hint = ConvertTo-DisplayText -Text " $FooterHint" -Width $innerW
+    Add-BoxLine -Sb $sb -Row ($box.Y + 1 + $box.BodyCapacity) -Col $box.X -Content ($border + [string]$g.V + $t.FootBg + (Format-KeyHint -Text $hint) + $t.Reset + $border + [string]$g.V)
+    Add-BoxLine -Sb $sb -Row ($box.Y + 2 + $box.BodyCapacity) -Col $box.X -Content ($border + [string]$g.BL + ([string]$g.H * $innerW) + [string]$g.BR)
     [Console]::Write($sb.ToString())
     return $box
 }
+
+function Add-BoxLine {
+    # Like Add-FrameLine but positioned at a column and *not* clearing to end
+    # of line, so the backdrop to the right of the box survives.
+    param([System.Text.StringBuilder]$Sb, [int]$Row, [int]$Col, [string]$Content)
+    [void]$Sb.Append("$script:ESC[$Row;${Col}H")
+    [void]$Sb.Append($Content)
+    [void]$Sb.Append($script:T.Reset)
+}
+
 
 function Show-SettingsDialog {
     # Multi-field editor over a copied draft; $Config itself is never
