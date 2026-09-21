@@ -400,8 +400,9 @@ function Show-PreviewDialog {
         $sb = New-Object System.Text.StringBuilder
         [void]$sb.Append("$script:ESC[2J")
         [void]$sb.Append($preview.Frame)
-        $hint = " $($Rows.Count) selected - Up/Down/PgUp/PgDn scroll  Y apply  N/Esc cancel"
-        Add-FrameLine -Sb $sb -Row $size[1] -Content ($script:T.FootBg + (ConvertTo-DisplayText -Text $hint -Width $bodyW))
+        $hint = ConvertTo-DisplayText -Text " $($Rows.Count) selected - Up/Down/PgUp/PgDn scroll  Y apply  N/Esc cancel" -Width $bodyW
+        $colored = (Format-KeyHint -Text $hint).Replace($script:T.HotKey + 'Y', $script:T.FootBg + $script:T.Good + 'Y').Replace($script:T.HotKey + 'N/Esc', $script:T.FootBg + $script:T.Danger + 'N/Esc')
+        Add-FrameLine -Sb $sb -Row $size[1] -Content ($script:T.FootBg + $colored)
         [Console]::Write($sb.ToString())
 
         $key = Read-DialogKey

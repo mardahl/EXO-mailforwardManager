@@ -138,27 +138,35 @@ function Get-PreviewFrame {
         [Parameter(Mandatory)][int]$Height
     )
     $t = $script:T
-    $lines = New-Object System.Collections.Generic.List[string]
+    $lines = New-Object System.Collections.Generic.List[object]
     foreach ($r in $Rows) {
         foreach ($chunk in (Split-DisplayChunks -Text ([string]$r.PrimarySmtpAddress) -Width $Width)) {
-            [void]$lines.Add($chunk)
+            [void]$lines.Add(@{ Text = $chunk; Tag = '' })
         }
         $old = [string]$r.CurrentForwarding
         $new = [string]$r.WillForwardTo
         foreach ($chunk in (Split-DisplayChunks -Text "  $old -> $new" -Width $Width)) {
-            [void]$lines.Add($chunk)
+            [void]$lines.Add(@{ Text = $chunk; Tag = '' })
         }
         $keep = if ($r.DeliverAndStore) { 'Yes' } else { 'No' }
-        [void]$lines.Add("  Keep copy: $keep  [$($r.Action)]")
-        [void]$lines.Add('')
+        [void]$lines.Add(@{ Text = "  Keep copy: $keep  "; Tag = "[$($r.Action)]" })
+        [void]$lines.Add(@{ Text = ''; Tag = '' })
     }
 
     $sb = New-Object System.Text.StringBuilder
     for ($row = 1; $row -le $Height; $row++) {
         $idx = $Offset + $row - 1
-        $content = if ($idx -ge 0 -and $idx -lt $lines.Count) {
-            $t.Row + (ConvertTo-DisplayText -Text $lines[$idx] -Width $Width)
-        } else { '' }
+        $content = ''
+        if ($idx -ge 0 -and $idx -lt $lines.Count) {
+            $l = $lines[$idx]
+            if ($l.Tag) {
+                $tagCol = switch ($l.Tag) { '[Set]' { $t.Good } '[Overwrite]' { $t.Proposed } '[Skip]' { $t.RowDim } default { $t.Row } }
+                $textW = [Math]::Max(0, $Width - $l.Tag.Length)
+                $content = $t.Row + (ConvertTo-DisplayText -Text $l.Text -Width $textW) + $tagCol + (ConvertTo-DisplayText -Text $l.Tag -Width $l.Tag.Length)
+            } else {
+                $content = $t.Row + (ConvertTo-DisplayText -Text $l.Text -Width $Width)
+            }
+        }
         Add-FrameLine -Sb $sb -Row $row -Content $content
     }
 

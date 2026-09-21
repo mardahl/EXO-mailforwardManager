@@ -27,7 +27,7 @@ The tool lists every user mailbox (cached locally), lets you search/filter and s
  [x] alice@source.example.com                          alice@target.example.com  Yes
  [ ] bob@source.example.com   bob@target.example.com    bob@target.example.com    Yes
  [ ] carol@source.example.com                           carol@target.example.com  Yes  Y
- Up/Dn Move  Space Sel  A All  N None  / Search  F Filter  Enter Edit  R Refresh  S Settings  P Preview  ? Help  Q Quit
+ Enter Actions  M Menu  Space Sel  / Search  P Preview  ? Help  Q Quit
 ```
 
 ---
@@ -105,6 +105,9 @@ Dry-run config + connectivity without touching mailboxes:
 3. Press **A** to select every mailbox matching the current filter/search. **N** clears every selection, including hidden ones.
 4. The header shows **Selected: N (M hidden)**. Preview includes every selected mailbox, even those hidden by the current filter.
 5. Press **P** to preview, review every destination, then **Y** to apply (**N**/Esc cancels; Enter alone never applies).
+
+- `Enter` opens an action menu for the highlighted mailbox (Select/Deselect, Edit forwarding, Keep copy on/off, Preview & apply). `M` opens the global Actions menu (select all, clear, filter, search, preview, refresh, settings, help, quit). Every menu item shows its hotkey; the same letters work directly on the table.
+- Color legend: **blue bar** = where input goes now (cursor row, focused field, highlighted menu item); **cyan** = selected mailboxes; **yellow** = a key to press; **amber** = proposed forwarding that will change on apply; **red** = warning / cancel; **green** = keep-copy on / apply.
 
 **Deliver+Store is not a selection control.** It controls whether incoming mail is kept in the source mailbox as well as forwarded. Apply reports numeric totals for applied, skipped, and failed mailboxes, including single-mailbox runs.
 

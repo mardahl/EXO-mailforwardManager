@@ -1107,6 +1107,20 @@ Test-Case 'Get-MailboxFrame header highlights the selected count when non-zero' 
     Assert ($frame.Contains($script:T.SelMark + 'Selected: 1')) 'Selected count must be highlighted.'
 }
 
+# --- Preview coloring ---------------------------------------------------------
+Test-Case 'Get-PreviewFrame colors action tags Set/Overwrite/Skip without changing LineCount' {
+    $rows = @(
+        [pscustomobject]@{ PrimarySmtpAddress = 'a@x.com'; CurrentForwarding = ''; WillForwardTo = 'a@y.com'; DeliverAndStore = $false; Action = 'Set' },
+        [pscustomobject]@{ PrimarySmtpAddress = 'b@x.com'; CurrentForwarding = 'o@y.com'; WillForwardTo = 'b@y.com'; DeliverAndStore = $true; Action = 'Overwrite' },
+        [pscustomobject]@{ PrimarySmtpAddress = 'c@x.com'; CurrentForwarding = 'c@y.com'; WillForwardTo = 'c@y.com'; DeliverAndStore = $false; Action = 'Skip' }
+    )
+    $r = Get-PreviewFrame -Rows $rows -Offset 0 -Width 80 -Height 20
+    Assert ($r.LineCount -eq 12) "Three records of four lines each, got $($r.LineCount)."
+    Assert ($r.Frame.Contains($script:T.Good + '[Set]')) 'Set must be green.'
+    Assert ($r.Frame.Contains($script:T.Proposed + '[Overwrite]')) 'Overwrite must be amber.'
+    Assert ($r.Frame.Contains($script:T.RowDim + '[Skip]')) 'Skip must be dim.'
+}
+
 } finally {
     try {
         [Console]::SetOut($script:OriginalConsoleOut)
