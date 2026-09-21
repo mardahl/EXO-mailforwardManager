@@ -824,6 +824,16 @@ Test-Case 'Show-SettingsDialog: invalid long domain at 80x20 anchors error tail 
     Assert ($pagedUpFrame -match 'Forwarding domain:      invalid domain') 'PageUp after validation error must capture earlier content instead of remaining stuck at tail.'
     Assert ($pagedUpFrame -notmatch 'Error: ForwardingDomain is not a valid hostname') 'Paged-up frame must be distinct from the tail error frame.'
 }
+
+# --- Theme tokens and glyphs --------------------------------------------------
+Test-Case 'Theme exposes every semantic token used by menus, popups and table cells' {
+    foreach ($k in 'FocusBg','Button','ButtonHot','Border','BorderDanger','Backdrop','Selected','SelectedCursor','Proposed','KeepOn','WarnFlag','HotKey') {
+        Assert ($script:T.ContainsKey($k) -and $script:T[$k].StartsWith([string][char]27)) "Missing or non-SGR theme token: $k"
+    }
+    foreach ($k in 'TL','TR','BL','BR') {
+        Assert ($script:G.ContainsKey($k) -and ([string]$script:G[$k]).Length -eq 1) "Missing box glyph: $k"
+    }
+}
 } finally {
     try {
         [Console]::SetOut($script:OriginalConsoleOut)
