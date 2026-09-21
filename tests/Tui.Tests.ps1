@@ -990,6 +990,55 @@ Test-Case 'Show-MenuDialog paints the highlighted item in Focus and hotkeys in H
     Assert ($out.Contains($script:T.HotKey + 'E')) 'Item hotkeys must be painted in HotKey.'
     Assert ($out.Contains($script:T.RowDim)) 'Disabled item must be dimmed.'
 }
+
+# --- Semantic table coloring ---------------------------------------------------
+Test-Case 'Get-MailboxFrame colors selected rows, proposed changes, keep-copy and warnings' {
+    $rows = New-Rows 4
+    $rows[0].Selected = $true
+    $rows[1].CurrentForwarding = 'old@x.com'; $rows[1].WillForwardTo = 'new@x.com'
+    $rows[2].DeliverAndStore = $true
+    $rows[3].HasOnPremForwarding = $true
+    $state = New-State $rows -Capacity 16
+    $state.Cursor = 3
+    $frame = Get-MailboxFrame -State $state -Width 100 -Height 20
+    $lines = $frame -split [regex]::Escape("$([char]27)[")
+    $r0 = ($lines | Where-Object { $_.Contains('user0@example.com') }) -join ''
+    $r1 = ($lines | Where-Object { $_.Contains('user1@example.com') }) -join ''
+    Assert ($frame.Contains($script:T.Selected + ' ')) 'Selected non-cursor row must use Selected style.'
+    Assert ($frame.Contains($script:T.SelMark)) 'Selected checkbox must use SelMark.'
+    Assert ($frame.Contains($script:T.Proposed + 'new@x.com')) 'Proposed != current must be amber.'
+    Assert ($frame.Contains($script:T.KeepOn + 'Yes')) 'Keep=Yes must be green.'
+    Assert ($frame.Contains($script:T.RowDim + 'No')) 'Keep=No must be dim.'
+    Assert ($frame.Contains($script:T.WarnFlag + 'Y')) 'Warn=Y must use WarnFlag.'
+    Assert ($frame.Contains($script:T.CursorFg)) 'Cursor row (unselected) keeps CursorFg.'
+}
+Test-Case 'Get-MailboxFrame uses SelectedCursor when the cursor sits on a selected row' {
+    $rows = New-Rows 2; $rows[0].Selected = $true
+    $state = New-State $rows -Capacity 16
+    $frame = Get-MailboxFrame -State $state -Width 100 -Height 20
+    Assert ($frame.Contains($script:T.SelectedCursor)) 'Selected row under cursor must use SelectedCursor.'
+}
+Test-Case 'Get-MailboxFrame strips control characters from cells even with coloring' {
+    $rows = New-Rows 1
+    $rows[0].WillForwardTo = "evil$([char]27)[31m@x.com"; $rows[0].CurrentForwarding = 'a@x.com'
+    $state = New-State $rows -Capacity 16
+    $frame = Get-MailboxFrame -State $state -Width 100 -Height 20
+    Assert (-not $frame.Contains("$([char]27)[31m")) 'Cell text must be sanitized before color is applied.'
+}
+Test-Case 'Get-MailboxFrame footer advertises Enter Actions and M Menu with hotkey coloring' {
+    $state = New-State (New-Rows 1) -Capacity 16
+    $frame = Get-MailboxFrame -State $state -Width 100 -Height 20
+    Assert ($frame.Contains($script:T.HotKey + 'Enter')) 'Footer Enter must be a hotkey token.'
+    Assert ($frame.Contains('Actions') -and $frame.Contains('Menu')) 'Footer must mention Actions and Menu.'
+    Assert (-not $frame.Contains('Enter Edit')) 'Old footer text must be gone.'
+}
+Test-Case 'Get-MailboxFrame header highlights the selected count when non-zero' {
+    $rows = New-Rows 2; $rows[1].Selected = $true
+    $state = New-State $rows -Capacity 16
+    $frame = Get-MailboxFrame -State $state -Width 100 -Height 20
+    Assert ($frame.Contains($script:T.SelMark + 'Selected: 1')) 'Selected count must be highlighted.'
+}
+
 } finally {
     try {
         [Console]::SetOut($script:OriginalConsoleOut)

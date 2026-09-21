@@ -53,8 +53,12 @@ function Get-MailboxFrame {
 
     # Row 2: visible/total, selection, search/filter - counts always render
     # from Items/View counts, never by indexing a possibly-empty row.
-    $h2 = " Visible: $visible/$total  Selected: $($counts.Total) ($($counts.Hidden) hidden)  Search: '$($State.Search)'  Filter: $($State.Filter)"
-    Add-FrameLine -Sb $sb -Row 2 -Content ($t.HeaderTxt + (ConvertTo-DisplayText -Text $h2 -Width $Width))
+    $selStyle = if ($counts.Total -gt 0) { $t.SelMark } else { $t.HeaderTxt }
+    $h2a = ConvertTo-DisplayText -Text " Visible: $visible/$total  " -Width (" Visible: $visible/$total  ").Length
+    $h2b = "Selected: $($counts.Total) ($($counts.Hidden) hidden)"
+    $h2c = "  Search: '$($State.Search)'  Filter: $($State.Filter)"
+    $rest = [Math]::Max(0, $Width - $h2a.Length - $h2b.Length)
+    Add-FrameLine -Sb $sb -Row 2 -Content ($t.HeaderTxt + $h2a + $t.HeaderBg + $selStyle + $h2b + $t.HeaderTxt + (ConvertTo-DisplayText -Text $h2c -Width $rest))
 
     # Row 3: column heading.
     $layout = Get-TableLayout -Width $Width
@@ -74,17 +78,26 @@ function Get-MailboxFrame {
         $idx = $scroll + $i
         if ($idx -lt $visible) {
             $item = $State.View[$idx]
-            $sel = if ($item.Selected) { $script:G.ChkOn } else { $script:G.ChkOff }
-            $warn = if ($item.HasOnPremForwarding) { 'Y' } else { '' }
-            $keep = if ($item.DeliverAndStore) { 'Yes' } else { 'No' }
-            $line = ' ' + (ConvertTo-DisplayText -Text $sel -Width $layout.Sel) + ' ' +
-                (ConvertTo-DisplayText -Text ([string]$item.PrimarySmtpAddress) -Width $layout.Addr1) + ' ' +
-                (ConvertTo-DisplayText -Text ([string]$item.CurrentForwarding) -Width $layout.Addr2) + ' ' +
-                (ConvertTo-DisplayText -Text ([string]$item.WillForwardTo) -Width $layout.Addr3) + ' ' +
-                (ConvertTo-DisplayText -Text $keep -Width $layout.Keep) + ' ' +
-                (ConvertTo-DisplayText -Text $warn -Width $layout.Warn)
-            $style = if ($idx -eq [int]$State.Cursor) { $t.CursorFg } else { $t.Row }
-            Add-FrameLine -Sb $sb -Row $row -Content ($style + $line)
+            $isCur = ($idx -eq [int]$State.Cursor)
+            $base = if ($isCur -and $item.Selected) { $t.SelectedCursor }
+                    elseif ($isCur) { $t.CursorFg }
+                    elseif ($item.Selected) { $t.Selected }
+                    else { $t.Row }
+            $selTxt  = ConvertTo-DisplayText -Text $(if ($item.Selected) { $script:G.ChkOn } else { $script:G.ChkOff }) -Width $layout.Sel
+            $mbxTxt  = ConvertTo-DisplayText -Text ([string]$item.PrimarySmtpAddress) -Width $layout.Addr1
+            $curTxt  = ConvertTo-DisplayText -Text ([string]$item.CurrentForwarding) -Width $layout.Addr2
+            $newTxt  = ConvertTo-DisplayText -Text ([string]$item.WillForwardTo) -Width $layout.Addr3
+            $keepTxt = ConvertTo-DisplayText -Text $(if ($item.DeliverAndStore) { 'Yes' } else { 'No' }) -Width $layout.Keep
+            $warnTxt = ConvertTo-DisplayText -Text $(if ($item.HasOnPremForwarding) { 'Y' } else { '' }) -Width $layout.Warn
+            # Cell overrides are foreground-only SGR so the row background
+            # (cursor/selected) survives; $base is re-emitted after each cell.
+            $selCol  = if ($item.Selected) { $t.SelMark } else { '' }
+            $newCol  = if ($item.WillForwardTo -and ($item.WillForwardTo -ne $item.CurrentForwarding)) { $t.Proposed } else { '' }
+            $keepCol = if ($item.DeliverAndStore) { $t.KeepOn } else { $t.RowDim }
+            $warnCol = if ($item.HasOnPremForwarding) { $t.WarnFlag } else { '' }
+            $line = $base + ' ' + $selCol + $selTxt + $base + ' ' + $mbxTxt + ' ' + $curTxt + ' ' +
+                $newCol + $newTxt + $base + ' ' + $keepCol + $keepTxt + $base + ' ' + $warnCol + $warnTxt + $base
+            Add-FrameLine -Sb $sb -Row $row -Content $line
         } else {
             Add-FrameLine -Sb $sb -Row $row -Content ''
         }
@@ -92,8 +105,8 @@ function Get-MailboxFrame {
 
     # Footer: key hints + status.
     $status = if ($State.Status) { [string]$State.Status } else { '' }
-    $foot = ' Up/Dn Move  Space Sel  A All  N None  / Search  F Filter  Enter Edit  R Refresh  S Settings  P Preview  ? Help  Q Quit  ' + $status
-    Add-FrameLine -Sb $sb -Row $Height -Content ($t.FootBg + (ConvertTo-DisplayText -Text $foot -Width $Width))
+    $foot = ConvertTo-DisplayText -Text (' Enter Actions  M Menu  Space Sel  / Search  P Preview  ? Help  Q Quit  ' + $status) -Width $Width
+    Add-FrameLine -Sb $sb -Row $Height -Content ($t.FootBg + (Format-KeyHint -Text $foot))
 
     return $sb.ToString()
 }
