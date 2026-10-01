@@ -6,6 +6,17 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.4.0-rc.3] - 2026-10-01
+
+- Change: redesigned Preview. Fixed title and color-coded summary
+  (Overwrite amber, Set green, Skip gray, keep-copy state, overwrite
+  warning), one line per mailbox grouped by risk (Overwrite, Set, Skip),
+  `(none)` for empty current forwarding, truncation instead of wrapping.
+- Add: skipped mailboxes show why (recipient forward / already set);
+  the Skip group is collapsed by default, `S` toggles it.
+- Change: confirm key states the write count (`Y Write N change(s)`);
+  Y is disabled when nothing would be written.
+
 ## [1.4.0-rc.2] - 2026-10-01
 
 - Add: sign-in shows that session setup can take up to a minute after the
@@ -317,6 +328,7 @@ Initial release.
   release with the matching changelog section as notes.
 
 [Unreleased]: https://github.com/mardahl/EXO-mailforwardManager/compare/v1.3.1...HEAD
+[1.4.0-rc.3]: https://github.com/mardahl/EXO-mailforwardManager/compare/v1.4.0-rc.2...v1.4.0-rc.3
 [1.4.0-rc.2]: https://github.com/mardahl/EXO-mailforwardManager/compare/v1.4.0-rc.1...v1.4.0-rc.2
 [1.4.0-rc.1]: https://github.com/mardahl/EXO-mailforwardManager/compare/v1.3.1...v1.4.0-rc.1
 [1.3.1]: https://github.com/mardahl/EXO-mailforwardManager/compare/v1.3.0...v1.3.1
