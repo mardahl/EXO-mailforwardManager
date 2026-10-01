@@ -6,6 +6,12 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.4.0] - 2026-10-01
+
+Stable release of 1.4.0-rc.1 to rc.3 (see below): display name column on
+wide consoles, sign-in session-setup status, and the redesigned
+color-coded forwarding Preview.
+
 ## [1.4.0-rc.3] - 2026-10-01
 
 - Change: redesigned Preview. Fixed title and color-coded summary
@@ -327,7 +333,8 @@ Initial release.
   CHANGELOG - no source-repo bloat - and attaches it to the GitHub
   release with the matching changelog section as notes.
 
-[Unreleased]: https://github.com/mardahl/EXO-mailforwardManager/compare/v1.3.1...HEAD
+[Unreleased]: https://github.com/mardahl/EXO-mailforwardManager/compare/v1.4.0...HEAD
+[1.4.0]: https://github.com/mardahl/EXO-mailforwardManager/compare/v1.3.1...v1.4.0
 [1.4.0-rc.3]: https://github.com/mardahl/EXO-mailforwardManager/compare/v1.4.0-rc.2...v1.4.0-rc.3
 [1.4.0-rc.2]: https://github.com/mardahl/EXO-mailforwardManager/compare/v1.4.0-rc.1...v1.4.0-rc.2
 [1.4.0-rc.1]: https://github.com/mardahl/EXO-mailforwardManager/compare/v1.3.1...v1.4.0-rc.1
