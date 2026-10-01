@@ -97,7 +97,8 @@ function Invoke-TargetValidation {
         [scriptblock]$CheckRecipients = { param($mx, $addrs) Test-SmtpRecipient -Mx $mx -Address $addrs },
         [scriptblock]$OnProgress
     )
-    $result = [pscustomobject]@{ Aborted = $false; Messages = @(); Kept = 0; AlreadyForwarded = 0; RecipientForward = 0; Rejected = 0; Errors = 0; Details = @() }
+    $result = [pscustomobject]@{ Aborted = $false; Messages = @(); Kept = 0; AlreadyForwarded = 0; RecipientForward = 0; Rejected = 0; Errors = 0; Records = [System.Collections.Generic.List[object]]::new() }
+    $rec = { param($row, $outcome, $response) $result.Records.Add([pscustomobject]@{ Mailbox = $row.PrimarySmtpAddress; Target = $row.WillForwardTo; Outcome = $outcome; Response = [string]$response }) }
 
     $selected = @($Rows | Where-Object Selected)
     $hasFwd = @($selected | Where-Object { $_.HasOnPremForwarding -or -not [string]::IsNullOrEmpty($_.CurrentForwarding) })
@@ -125,12 +126,13 @@ function Invoke-TargetValidation {
         $row.Selected = $false
         if ($row.HasOnPremForwarding) {
             Set-TargetCheck $row 'Warn: recipient forward (ForwardingAddress) set'; $result.RecipientForward++
-            $result.Details += "$($row.PrimarySmtpAddress): $($row.TargetCheck)$(if ($row.ForwardingRecipient) { " -> $($row.ForwardingRecipient)" })"
+            & $rec $row 'RecipientForward' "ForwardingAddress -> $(if ($row.ForwardingRecipient) { $row.ForwardingRecipient } else { '?' })"
         } else {
             Set-TargetCheck $row 'Has SMTP forward'; $result.AlreadyForwarded++
+            & $rec $row 'SmtpForward' "ForwardingSmtpAddress -> $($row.CurrentForwarding)"
         }
     }
-    foreach ($row in $noTarget) { $row.Selected = $false; Set-TargetCheck $row 'No target'; $result.Errors++ }
+    foreach ($row in $noTarget) { $row.Selected = $false; Set-TargetCheck $row 'No target'; $result.Errors++; & $rec $row 'Error' 'No forwarding target' }
 
     # Only 2xx (exists) and 5xx (rejected) are final. 4xx replies and
     # addresses left unanswered by a dropped session (EXO throttling on large
@@ -156,10 +158,11 @@ function Invoke-TargetValidation {
                     $ans = $answers[$row.WillForwardTo]
                     if ($ans -and $ans.Exists) {
                         Set-TargetCheck $row 'OK'; $result.Kept++; $done++
+                        & $rec $row 'OK' $ans.Response
                     } elseif ($ans -and $ans.Response -match '^5') {
                         $row.Selected = $false
                         Set-TargetCheck $row "Rejected: $($ans.Response)"; $result.Rejected++; $done++
-                        $result.Details += "$($row.PrimarySmtpAddress) -> $($row.WillForwardTo): $($row.TargetCheck)"
+                        & $rec $row 'Rejected' $ans.Response
                     } else {
                         $lastError[$row.WillForwardTo] = if ($ans) { $ans.Response } elseif ($sessionError) { $sessionError } else { 'no reply' }
                         $retry += $row
@@ -171,9 +174,59 @@ function Invoke-TargetValidation {
         foreach ($row in $pending) {
             $row.Selected = $false
             Set-TargetCheck $row "Error: $($lastError[$row.WillForwardTo])"; $result.Errors++; $done++
-            $result.Details += "$($row.PrimarySmtpAddress) -> $($row.WillForwardTo): $($row.TargetCheck)"
+            & $rec $row 'Error' $lastError[$row.WillForwardTo]
         }
     }
     if ($OnProgress -and $toCheck.Count) { & $OnProgress $toCheck.Count $toCheck.Count '' }
     $result
+}
+
+function Get-ShortSmtpReply {
+    # Drops EXO's boilerplate tail: " For more information see https://..."
+    # and the "[server timestamp id]" trace block.
+    param([AllowEmptyString()][string]$Response)
+    (($Response -replace '\s*\[[^\]]*\]\s*$', '') -replace '\.?\s*For more information.*$', '').Trim()
+}
+
+function Format-ValidationReport {
+    # Summary counts, then deselected rows grouped by shortened reply.
+    # Returns dialog lines (strings or @{ Text; Style }).
+    param([Parameter(Mandatory)]$Result, [string]$LogPath)
+    $count = { param($label, $n, $style, $indent = '  ') @{ Text = ("$indent$label").PadRight(40) + ([string]$n).PadLeft(6); Style = $(if ($n) { $style } else { 'Dim' }) } }
+    $deselected = $Result.Rejected + $Result.AlreadyForwarded + $Result.RecipientForward + $Result.Errors
+    $lines = @(
+        (& $count 'Kept (250 OK)' $Result.Kept 'Good'),
+        (& $count 'Deselected' $deselected 'Row'),
+        (& $count 'Rejected' $Result.Rejected 'Danger' '    '),
+        (& $count 'SMTP forward already set' $Result.AlreadyForwarded 'Dim' '    '),
+        (& $count 'Recipient forward (Warn)' $Result.RecipientForward 'Warn' '    '),
+        (& $count 'Errors' $Result.Errors 'Warn' '    ')
+    )
+    $labels = [ordered]@{ Rejected = @('Rejected', 'Danger'); Error = @('Error', 'Warn'); RecipientForward = @('Recipient forward (Warn)', 'Warn'); SmtpForward = @('SMTP forward already set', 'Dim') }
+    $records = @($Result.Records | Where-Object Outcome -ne 'OK')
+    $width = [Math]::Max(10, (@($records | ForEach-Object { ([string]$_.Mailbox).Length }) + 0 | Measure-Object -Maximum).Maximum)
+    foreach ($outcome in $labels.Keys) {
+        $groups = @($records | Where-Object Outcome -eq $outcome | Group-Object { if ($outcome -in 'Rejected', 'Error') { Get-ShortSmtpReply $_.Response } else { '' } })
+        foreach ($g in $groups) {
+            $head = $labels[$outcome][0] + $(if ($g.Name) { " - $($g.Name)" }) + "  ($($g.Count))"
+            $lines += ''
+            $lines += @{ Text = "  $head"; Style = $labels[$outcome][1] }
+            foreach ($r in $g.Group) {
+                $to = if ($outcome -in 'Rejected', 'Error', 'OK') { $r.Target } else { ($r.Response -split '-> ', 2)[-1] }
+                $lines += "    $(([string]$r.Mailbox).PadRight($width))  -> $to"
+            }
+        }
+    }
+    if ($LogPath) { $lines += ''; $lines += @{ Text = "  Full replies: $LogPath"; Style = 'Dim' } }
+    $lines
+}
+
+function Export-ValidationLog {
+    # Full untrimmed replies for every processed row. Returns the path, or
+    # $null if writing failed (report still shows; nothing else depends on it).
+    param([Parameter(Mandatory)]$Result)
+    $stamp = Get-Date -Format 'yyyyMMdd-HHmmss'
+    $path = Join-Path $Script:ScriptDir "validation-$stamp.csv"
+    for ($n = 1; Test-Path $path; $n++) { $path = Join-Path $Script:ScriptDir "validation-$stamp-$n.csv" }
+    try { $Result.Records | Export-Csv -Path $path -NoTypeInformation -Encoding UTF8 -ErrorAction Stop; $path } catch { $null }
 }

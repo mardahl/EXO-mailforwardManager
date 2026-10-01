@@ -100,9 +100,8 @@ function Invoke-TuiValidate {
     if ($r.Aborted) {
         Show-ReportDialog -Title 'Validation not run - selection unchanged' -Lines $r.Messages
     } else {
-        $lines = @("Kept (250 OK): $($r.Kept)", "Deselected - SMTP forward already set: $($r.AlreadyForwarded)",
-            "Deselected - Warn: recipient forward (ForwardingAddress) set: $($r.RecipientForward)",
-            "Deselected - rejected: $($r.Rejected)", "Deselected - errors: $($r.Errors)") + @($r.Details)
+        $log = Export-ValidationLog -Result $r
+        $lines = Format-ValidationReport -Result $r -LogPath $(if ($log) { $log } else { '(log write failed)' })
         Show-ReportDialog -Title 'Validation results' -Lines $lines
     }
     $script:UI.Dirty = $true

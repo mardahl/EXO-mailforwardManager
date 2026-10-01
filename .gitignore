@@ -2,6 +2,7 @@
 config.json
 cache.json
 changelog-*.csv
+validation-*.csv
 
 # OS / editor noise
 .DS_Store

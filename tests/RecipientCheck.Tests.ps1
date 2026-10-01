@@ -111,3 +111,36 @@ Assert ($script:session -eq $script:SmtpMaxAttempts) 'Persistent 4xx must stop a
 Assert (-not $rows[0].Selected -and $rows[0].TargetCheck -like 'Error: 451*' -and $r.Errors -eq 1) 'Persistent 4xx is an error, not a rejection.'
 
 Write-Host 'RecipientCheck tests passed.'
+
+# --- Report formatting ----------------------------------------------------------
+
+$long = '550 5.4.1 Recipient address rejected: Access denied. For more information see https://aka.ms/EXOSmtpErrors [MAD0EPF000008C2.eurprd05.prod.outlook.com 2026-10-01T13:24:15.682Z 08DF1F34B1256E60]'
+Assert ((Get-ShortSmtpReply $long) -eq '550 5.4.1 Recipient address rejected: Access denied') "Short reply wrong: $(Get-ShortSmtpReply $long)"
+Assert ((Get-ShortSmtpReply '421 4.7.0 Too many connections') -eq '421 4.7.0 Too many connections') 'Plain reply must pass through.'
+
+$rows = @(
+    (New-Row 'a@s.com' 'a@t.com'), (New-Row 'bb@s.com' 'bb@t.com'), (New-Row 'ok@s.com' 'ok@t.com'),
+    (New-Row 'w@s.com' 'w@t.com' '' $true)
+)
+$r = Invoke-TargetValidation -Rows $rows -ResolveMx { 'mx' } -TestPort {} -CheckRecipients {
+    param($mx, $addrs)
+    foreach ($a in $addrs) { [pscustomobject]@{ Address = $a; Exists = ($a -like 'ok@*'); Response = $(if ($a -like 'ok@*') { '250 OK' } else { $long -replace '15\.682Z', (Get-Random) }) } }
+}
+Assert ($r.Records.Count -eq 4) 'Every processed row must produce a record.'
+$lines = @(Format-ValidationReport -Result $r -LogPath 'x.csv')
+$text = @($lines | ForEach-Object { if ($_ -is [hashtable]) { $_.Text } else { $_ } })
+$heads = @($text | Where-Object { $_ -like '*Rejected - 550*' })
+Assert ($heads.Count -eq 1 -and $heads[0] -like '*Access denied  (2)') "Rejects with different trace ids must group under one header: $($heads -join ' | ')"
+Assert (-not ($text -match 'aka\.ms')) 'Boilerplate must not appear in report.'
+Assert (@($text | Where-Object { $_ -match '^\s+a@s\.com\s+-> a@t\.com$' }).Count -eq 1) 'Row line must be "mailbox -> target".'
+Assert (@($text | Where-Object { $_ -like '*Recipient forward (Warn)  (1)*' }).Count -eq 1) 'Recipient forward group missing.'
+Assert ($text[-1] -like '*Full replies: x.csv') 'Log path must be shown.'
+$keptLine = $lines[0]
+Assert ($keptLine.Style -eq 'Good' -and $keptLine.Text -match 'Kept \(250 OK\)\s+1$') 'Kept count must be green and right-aligned.'
+
+$script:ScriptDir = [IO.Path]::GetTempPath()
+$path = Export-ValidationLog -Result $r
+Assert ($path -and (Import-Csv $path).Count -eq 4 -and ((Import-Csv $path) | Where-Object Outcome -eq 'Rejected')[0].Response -like '*aka.ms*') 'CSV must hold full replies.'
+Remove-Item $path
+
+Write-Host 'Report formatting tests passed.'

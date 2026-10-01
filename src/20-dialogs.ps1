@@ -100,6 +100,8 @@ function Get-StyledLine {
             'ButtonHot' { $t.ButtonHot }
             'Dim'       { $t.RowDim }
             'Danger'    { $t.Danger }
+            'Good'      { $t.Good }
+            'Warn'      { $t.Warn }
             default     { $t.Row }
         }
         return @($style, [string]$Line.Text)
@@ -431,7 +433,8 @@ function Show-ReportDialog {
     # Read-only scrollable report; no return value.
     param(
         [Parameter(Mandatory)][string]$Title,
-        [Parameter(Mandatory)][AllowEmptyCollection()][AllowEmptyString()][string[]]$Lines
+        # Strings or @{ Text; Style } (see Get-StyledLine); style survives wrapping.
+        [Parameter(Mandatory)][AllowEmptyCollection()][AllowEmptyString()][object[]]$Lines
     )
     Clear-DialogKeyQueue
     $offset = 0
@@ -442,10 +445,11 @@ function Show-ReportDialog {
         # ellipsis by Write-DialogFrame's fixed-width cell rendering.
         $probe = Get-DialogBox -BodyHeight ([Math]::Max(1, $Lines.Count))
         $wrapWidth = [Math]::Max(10, $probe.InnerW)
-        $wrapped = New-Object System.Collections.Generic.List[string]
+        $wrapped = New-Object System.Collections.Generic.List[object]
         foreach ($line in $Lines) {
-            foreach ($chunk in (Split-DisplayChunks -Text ([string]$line) -Width $wrapWidth)) {
-                [void]$wrapped.Add($chunk)
+            $text = if ($line -is [hashtable]) { [string]$line.Text } else { [string]$line }
+            foreach ($chunk in (Split-DisplayChunks -Text $text -Width $wrapWidth)) {
+                [void]$wrapped.Add($(if ($line -is [hashtable]) { @{ Text = $chunk; Style = $line.Style } } else { $chunk }))
             }
         }
         $box = Get-DialogBox -BodyHeight $wrapped.Count
