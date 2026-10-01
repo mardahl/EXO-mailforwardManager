@@ -6,6 +6,12 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.4.0-rc.2] - 2026-10-01
+
+- Add: sign-in shows that session setup can take up to a minute after the
+  sign-in window closes, and confirms once connected, instead of a silent
+  pause.
+
 ## [1.4.0-rc.1] - 2026-10-01
 
 - Add: mailbox display name column (`Name`) when the console is at least
@@ -311,6 +317,7 @@ Initial release.
   release with the matching changelog section as notes.
 
 [Unreleased]: https://github.com/mardahl/EXO-mailforwardManager/compare/v1.3.1...HEAD
+[1.4.0-rc.2]: https://github.com/mardahl/EXO-mailforwardManager/compare/v1.4.0-rc.1...v1.4.0-rc.2
 [1.4.0-rc.1]: https://github.com/mardahl/EXO-mailforwardManager/compare/v1.3.1...v1.4.0-rc.1
 [1.3.1]: https://github.com/mardahl/EXO-mailforwardManager/compare/v1.3.0...v1.3.1
 [1.3.1-rc.4]: https://github.com/mardahl/EXO-mailforwardManager/compare/v1.3.1-rc.3...v1.3.1-rc.4
