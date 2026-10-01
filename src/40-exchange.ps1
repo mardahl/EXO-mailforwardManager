@@ -184,6 +184,7 @@ function Get-MailboxList {
                 $m = $_
                 [pscustomobject]@{
                     PrimarySmtpAddress           = [string]$m.PrimarySmtpAddress
+                    DisplayName                  = [string]$m.DisplayName
                     ForwardingSmtpAddress        = if ($m.ForwardingSmtpAddress) { ($m.ForwardingSmtpAddress -replace '^smtp:','') } else { '' }
                     DeliverToMailboxAndForward   = [bool]$m.DeliverToMailboxAndForward
                     HasOnPremForwardingAddress   = [bool]$m.ForwardingAddress

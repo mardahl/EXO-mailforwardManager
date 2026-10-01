@@ -16,9 +16,13 @@ function Get-TableLayout {
     $fixed = $sel + $keep + $warn + $gaps
     $flex = $Width - $fixed
     if ($flex -lt 21) { $flex = 21 }
+    # Display name column only on wide windows (>=120 cols); capped at 30
+    # chars, longer names truncate with an ellipsis. Eats one extra gap.
+    $name = 0
+    if ($Width -ge 120) { $name = [Math]::Min(30, [int]($flex / 4)); $flex -= $name + 1 }
     $addr = [int]($flex / 3)
     $last = $flex - ($addr * 2)
-    return @{ Sel = $sel; Keep = $keep; Warn = $warn; Addr1 = $addr; Addr2 = $addr; Addr3 = $last }
+    return @{ Sel = $sel; Keep = $keep; Warn = $warn; Name = $name; Addr1 = $addr; Addr2 = $addr; Addr3 = $last }
 }
 
 function Get-MailboxFrame {
@@ -75,6 +79,7 @@ function Get-MailboxFrame {
     # Row 3: column heading.
     $layout = Get-TableLayout -Width $Width
     $head = ' ' + (ConvertTo-DisplayText -Text ' ' -Width $layout.Sel) + ' ' +
+        $(if ($layout.Name) { (ConvertTo-DisplayText -Text 'Name' -Width $layout.Name) + ' ' }) +
         (ConvertTo-DisplayText -Text 'Mailbox' -Width $layout.Addr1) + ' ' +
         (ConvertTo-DisplayText -Text 'Current forwarding' -Width $layout.Addr2) + ' ' +
         (ConvertTo-DisplayText -Text 'Proposed forwarding' -Width $layout.Addr3) + ' ' +
@@ -97,6 +102,7 @@ function Get-MailboxFrame {
                     else { $t.Row }
             $selTxt  = ConvertTo-DisplayText -Text $(if ($item.Selected) { $script:G.ChkOn } else { $script:G.ChkOff }) -Width $layout.Sel
             $mbxTxt  = ConvertTo-DisplayText -Text ([string]$item.PrimarySmtpAddress) -Width $layout.Addr1
+            if ($layout.Name) { $mbxTxt = (ConvertTo-DisplayText -Text ([string]$item.DisplayName) -Width $layout.Name) + ' ' + $mbxTxt }
             $cur = [string]$item.CurrentForwarding
             if (-not $cur -and $item.HasOnPremForwarding) {
                 $cur = '(recipient) ' + $(if ($item.ForwardingRecipient) { [string]$item.ForwardingRecipient } else { 'press R to resolve' })
