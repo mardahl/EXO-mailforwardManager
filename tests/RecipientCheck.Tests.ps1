@@ -68,7 +68,7 @@ Assert (-not $rows[1].Selected -and $rows[1].TargetCheck -like 'Rejected: 550*')
 Assert (-not $rows[2].Selected -and -not $rows[3].Selected) 'Already-forwarding/on-prem rows must be deselected.'
 Assert (-not $rows[4].Selected -and $rows[4].TargetCheck -like 'Error: session dropped') 'Session error must deselect.'
 Assert ($rows[5].TargetCheck -eq '') 'Unselected rows must not be touched.'
-Assert ($r.Kept -eq 1 -and $r.Rejected -eq 1 -and $r.AlreadyForwarded -eq 2 -and $r.Errors -eq 1) "Counts wrong: $($r | Out-String)"
+Assert ($r.Kept -eq 1 -and $r.Rejected -eq 1 -and $r.AlreadyForwarded -eq 1 -and $r.RecipientForward -eq 1 -and $r.Errors -eq 1) "Counts wrong: $($r | Out-String)"
 
 # --- Batching ---------------------------------------------------------------
 

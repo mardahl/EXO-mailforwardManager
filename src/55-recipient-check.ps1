@@ -97,7 +97,7 @@ function Invoke-TargetValidation {
         [scriptblock]$CheckRecipients = { param($mx, $addrs) Test-SmtpRecipient -Mx $mx -Address $addrs },
         [scriptblock]$OnProgress
     )
-    $result = [pscustomobject]@{ Aborted = $false; Messages = @(); Kept = 0; AlreadyForwarded = 0; Rejected = 0; Errors = 0; Details = @() }
+    $result = [pscustomobject]@{ Aborted = $false; Messages = @(); Kept = 0; AlreadyForwarded = 0; RecipientForward = 0; Rejected = 0; Errors = 0; Details = @() }
 
     $selected = @($Rows | Where-Object Selected)
     $hasFwd = @($selected | Where-Object { $_.HasOnPremForwarding -or -not [string]::IsNullOrEmpty($_.CurrentForwarding) })
@@ -121,7 +121,15 @@ function Invoke-TargetValidation {
     if ($result.Messages.Count -gt 0) { $result.Aborted = $true; return $result }
 
     # --- Validation --------------------------------------------------------
-    foreach ($row in $hasFwd)   { $row.Selected = $false; Set-TargetCheck $row 'Has forward'; $result.AlreadyForwarded++ }
+    foreach ($row in $hasFwd) {
+        $row.Selected = $false
+        if ($row.HasOnPremForwarding) {
+            Set-TargetCheck $row 'Warn: recipient forward (ForwardingAddress) set'; $result.RecipientForward++
+            $result.Details += "$($row.PrimarySmtpAddress): $($row.TargetCheck)$(if ($row.ForwardingRecipient) { " -> $($row.ForwardingRecipient)" })"
+        } else {
+            Set-TargetCheck $row 'Has SMTP forward'; $result.AlreadyForwarded++
+        }
+    }
     foreach ($row in $noTarget) { $row.Selected = $false; Set-TargetCheck $row 'No target'; $result.Errors++ }
 
     # Only 2xx (exists) and 5xx (rejected) are final. 4xx replies and

@@ -148,6 +148,19 @@ function Send-ExoProgress {
     Write-Progress -Activity 'Exchange Online' -Status $Status
 }
 
+function Resolve-ForwardingRecipients {
+    # ForwardingAddress is a directory identity (name), not an address:
+    # resolve each distinct value once so the table can show where mail goes.
+    # Unresolvable identities keep the raw value.
+    # ponytail: one Get-Recipient per distinct target; usually a handful.
+    param([Parameter(Mandatory)][AllowEmptyCollection()][array]$Mailboxes)
+    $resolved = @{}
+    foreach ($id in @($Mailboxes | Where-Object ForwardingRecipient | ForEach-Object ForwardingRecipient | Sort-Object -Unique)) {
+        try { $resolved[$id] = [string](Get-Recipient -Identity $id -ErrorAction Stop).PrimarySmtpAddress } catch { $resolved[$id] = $id }
+    }
+    foreach ($m in $Mailboxes) { if ($m.ForwardingRecipient -and $resolved[$m.ForwardingRecipient]) { $m.ForwardingRecipient = $resolved[$m.ForwardingRecipient] } }
+}
+
 function Get-MailboxList {
     param([switch]$Force, [scriptblock]$OnProgress)
     $cache = Read-MailboxCache
@@ -175,6 +188,7 @@ function Get-MailboxList {
                     ForwardingSmtpAddress        = if ($m.ForwardingSmtpAddress) { ($m.ForwardingSmtpAddress -replace '^smtp:','') } else { '' }
                     DeliverToMailboxAndForward   = [bool]$m.DeliverToMailboxAndForward
                     HasOnPremForwardingAddress   = [bool]$m.ForwardingAddress
+                    ForwardingRecipient          = [string]$m.ForwardingAddress
                 }
                 $count++
                 if ($count % 100 -eq 0) {
@@ -188,6 +202,7 @@ function Get-MailboxList {
         $timer.Stop()
         Send-ExoProgress -OnProgress $OnProgress -Completed
     }
+    Resolve-ForwardingRecipients -Mailboxes $list
     Save-MailboxCache -Mailboxes $list
     Send-ExoProgress -OnProgress $OnProgress -Count $list.Count -Status "Retrieved $($list.Count) mailboxes; elapsed $($timer.Elapsed.ToString('hh\:mm\:ss')). Loading complete."
     $list

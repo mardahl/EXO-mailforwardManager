@@ -14,6 +14,7 @@ function New-MailboxRows {
             PrimarySmtpAddress  = $m.PrimarySmtpAddress
             CurrentForwarding   = $m.ForwardingSmtpAddress
             HasOnPremForwarding = [bool]$m.HasOnPremForwardingAddress
+            ForwardingRecipient = [string]$m.ForwardingRecipient
             DeliverAndStore     = [bool]$Config.DeliverToMailboxAndForward
             ForwardingPrefix    = $prefix
             WillForwardTo       = $willTo
@@ -28,8 +29,8 @@ function Update-MailboxView {
     $State.View = @($State.Items | Where-Object {
         (-not $State.Search -or $_.PrimarySmtpAddress -like "*$($State.Search)*") -and
         ($State.Filter -eq 'All' -or
-         ($State.Filter -eq 'HasForward' -and -not [string]::IsNullOrEmpty($_.CurrentForwarding)) -or
-         ($State.Filter -eq 'NoForward' -and [string]::IsNullOrEmpty($_.CurrentForwarding)))
+         ($State.Filter -eq 'HasForward' -and ($_.HasOnPremForwarding -or -not [string]::IsNullOrEmpty($_.CurrentForwarding))) -or
+         ($State.Filter -eq 'NoForward' -and -not $_.HasOnPremForwarding -and [string]::IsNullOrEmpty($_.CurrentForwarding)))
     })
 
     $State.Cursor = [Math]::Max(0, [Math]::Min($State.Cursor, $State.View.Count - 1))
@@ -117,6 +118,7 @@ function Merge-MailboxRefresh {
             $m = $byAddr[$row.PrimarySmtpAddress]
             $row.CurrentForwarding   = $m.ForwardingSmtpAddress
             $row.HasOnPremForwarding = [bool]$m.HasOnPremForwardingAddress
+            $row | Add-Member -NotePropertyName ForwardingRecipient -NotePropertyValue ([string]$m.ForwardingRecipient) -Force
         }
     }
 }

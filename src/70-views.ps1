@@ -85,7 +85,11 @@ function Get-MailboxFrame {
                     else { $t.Row }
             $selTxt  = ConvertTo-DisplayText -Text $(if ($item.Selected) { $script:G.ChkOn } else { $script:G.ChkOff }) -Width $layout.Sel
             $mbxTxt  = ConvertTo-DisplayText -Text ([string]$item.PrimarySmtpAddress) -Width $layout.Addr1
-            $curTxt  = ConvertTo-DisplayText -Text ([string]$item.CurrentForwarding) -Width $layout.Addr2
+            $cur = [string]$item.CurrentForwarding
+            if (-not $cur -and $item.HasOnPremForwarding) {
+                $cur = '(recipient) ' + $(if ($item.ForwardingRecipient) { [string]$item.ForwardingRecipient } else { 'press R to resolve' })
+            }
+            $curTxt  = ConvertTo-DisplayText -Text $cur -Width $layout.Addr2
             $newTxt  = ConvertTo-DisplayText -Text ([string]$item.WillForwardTo) -Width $layout.Addr3
             $keepTxt = ConvertTo-DisplayText -Text $(if ($item.DeliverAndStore) { 'Yes' } else { 'No' }) -Width $layout.Keep
             $warnTxt = ConvertTo-DisplayText -Text $(if ($item.HasOnPremForwarding) { 'Y' } else { '' }) -Width $layout.Warn

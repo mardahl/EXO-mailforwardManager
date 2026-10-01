@@ -207,3 +207,24 @@ Assert ($mergeItems[0].Selected -eq $true) 'Selection must survive refresh.'
 Assert ($mergeItems[1].CurrentForwarding -eq '') 'Unmatched record (bob dropped from source) must be left alone.'
 
 Write-Host 'MailboxModel.Tests.ps1: all assertions passed.'
+
+# --- Recipient forwards (ForwardingAddress / Warn=Y) -------------------------
+
+function Get-Recipient { param($Identity, $ErrorAction) if ($Identity -eq 'Legacy Contact') { [pscustomobject]@{ PrimarySmtpAddress = 'legacy@ext.example' } } else { throw 'not found' } }
+$mbx = @(
+    [pscustomobject]@{ PrimarySmtpAddress = 'w1@example.com'; ForwardingSmtpAddress = ''; HasOnPremForwardingAddress = $true; ForwardingRecipient = 'Legacy Contact' },
+    [pscustomobject]@{ PrimarySmtpAddress = 'w2@example.com'; ForwardingSmtpAddress = ''; HasOnPremForwardingAddress = $true; ForwardingRecipient = 'Gone' },
+    [pscustomobject]@{ PrimarySmtpAddress = 'n@example.com';  ForwardingSmtpAddress = ''; HasOnPremForwardingAddress = $false; ForwardingRecipient = '' }
+)
+Resolve-ForwardingRecipients -Mailboxes $mbx
+Assert ($mbx[0].ForwardingRecipient -eq 'legacy@ext.example') 'Recipient identity must resolve to SMTP.'
+Assert ($mbx[1].ForwardingRecipient -eq 'Gone') 'Unresolvable identity must keep raw value.'
+
+$st = @{ Items = @(New-MailboxRows -Mailboxes $mbx -Config $config); Search = ''; Filter = 'NoForward'; Cursor = 0 }
+Update-MailboxView -State $st
+Assert ($st.View.Count -eq 1 -and $st.View[0].PrimarySmtpAddress -eq 'n@example.com') 'NoForward must exclude recipient-forward rows.'
+$st.Filter = 'HasForward'; Update-MailboxView -State $st
+Assert ($st.View.Count -eq 2) 'HasForward must include recipient-forward rows.'
+$st.Height = 10
+$frame = Get-MailboxFrame -State $st -Width 160 -Height 30
+Assert ($frame -match '\(recipient\) legacy@ext\.example') 'Current column must show resolved recipient forward.'
