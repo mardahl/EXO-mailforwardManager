@@ -6,6 +6,15 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.3.1-rc.2] - 2026-10-01
+
+- Fix: validating hundreds of rows deselected whole batches when Exchange
+  Online throttled or dropped the SMTP session mid-batch. Replies received
+  before a drop are now kept; only 2xx (exists) and 5xx (rejected) are
+  final. 4xx replies and unanswered addresses are retried on a fresh
+  session (up to 3 attempts, 10 s / 20 s pauses) and reported as `Error`
+  with the last reply if they never succeed.
+
 ## [1.3.1-rc.1] - 2026-10-01
 
 - Fix: target validation (`V`) failed with `452 4.5.3 Too many recipients`
@@ -263,7 +272,8 @@ Initial release.
   CHANGELOG - no source-repo bloat - and attaches it to the GitHub
   release with the matching changelog section as notes.
 
-[Unreleased]: https://github.com/mardahl/EXO-mailforwardManager/compare/v1.3.1-rc.1...HEAD
+[Unreleased]: https://github.com/mardahl/EXO-mailforwardManager/compare/v1.3.1-rc.2...HEAD
+[1.3.1-rc.2]: https://github.com/mardahl/EXO-mailforwardManager/compare/v1.3.1-rc.1...v1.3.1-rc.2
 [1.3.1-rc.1]: https://github.com/mardahl/EXO-mailforwardManager/compare/v1.3.0...v1.3.1-rc.1
 [1.3.0]: https://github.com/mardahl/EXO-mailforwardManager/compare/v1.2.1...v1.3.0
 [1.3.0-rc.2]: https://github.com/mardahl/EXO-mailforwardManager/compare/v1.3.0-rc.1...v1.3.0-rc.2
