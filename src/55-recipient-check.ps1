@@ -5,6 +5,8 @@
 
 $script:SmtpBatchSize = 100   # reconnect after this many RCPTs; EXO throttles long sessions
 $script:SmtpTimeoutMs = 15000
+$script:SmtpMaxAttempts = 3     # 4xx / dropped-session retries per address
+$script:SmtpRetryDelaySec = 10  # pause before retry n = delay * (n-1)
 
 function Resolve-TargetMx {
     param([Parameter(Mandatory)][string]$Domain)
@@ -122,33 +124,46 @@ function Invoke-TargetValidation {
     foreach ($row in $hasFwd)   { $row.Selected = $false; Set-TargetCheck $row 'Has forward'; $result.AlreadyForwarded++ }
     foreach ($row in $noTarget) { $row.Selected = $false; Set-TargetCheck $row 'No target'; $result.Errors++ }
 
+    # Only 2xx (exists) and 5xx (rejected) are final. 4xx replies and
+    # addresses left unanswered by a dropped session (EXO throttling on large
+    # runs) are retried on a fresh session after a growing pause; replies
+    # received before a drop are kept (pipeline streams them out).
     $done = 0
     foreach ($group in @($toCheck | Group-Object { ($_.WillForwardTo -split '@')[1].ToLowerInvariant() })) {
         $mx = $mxByDomain[$group.Name]
-        $groupRows = @($group.Group)
-        for ($i = 0; $i -lt $groupRows.Count; $i += $script:SmtpBatchSize) {
-            $batch = @($groupRows[$i..([Math]::Min($i + $script:SmtpBatchSize, $groupRows.Count) - 1)])
-            if ($OnProgress) { & $OnProgress $done $toCheck.Count $batch[0].WillForwardTo }
-            $answers = @{}
-            $sessionError = $null
-            try {
-                foreach ($r in @(& $CheckRecipients $mx @($batch.WillForwardTo))) { $answers[$r.Address] = $r }
-            } catch { $sessionError = $_.Exception.Message }
-            foreach ($row in $batch) {
-                $ans = $answers[$row.WillForwardTo]
-                if ($ans -and $ans.Exists) {
-                    Set-TargetCheck $row 'OK'; $result.Kept++
-                } else {
-                    $row.Selected = $false
-                    if ($ans) {
-                        Set-TargetCheck $row "Rejected: $($ans.Response)"; $result.Rejected++
+        $pending = @($group.Group)
+        $lastError = @{}
+        for ($attempt = 1; $attempt -le $script:SmtpMaxAttempts -and $pending.Count; $attempt++) {
+            if ($attempt -gt 1 -and $script:SmtpRetryDelaySec -gt 0) { Start-Sleep -Seconds ($script:SmtpRetryDelaySec * ($attempt - 1)) }
+            $retry = @()
+            for ($i = 0; $i -lt $pending.Count; $i += $script:SmtpBatchSize) {
+                $batch = @($pending[$i..([Math]::Min($i + $script:SmtpBatchSize, $pending.Count) - 1)])
+                if ($OnProgress) { & $OnProgress $done $toCheck.Count $batch[0].WillForwardTo }
+                $answers = @{}
+                $sessionError = $null
+                try {
+                    & $CheckRecipients $mx @($batch.WillForwardTo) | ForEach-Object { $answers[$_.Address] = $_ }
+                } catch { $sessionError = $_.Exception.Message }
+                foreach ($row in $batch) {
+                    $ans = $answers[$row.WillForwardTo]
+                    if ($ans -and $ans.Exists) {
+                        Set-TargetCheck $row 'OK'; $result.Kept++; $done++
+                    } elseif ($ans -and $ans.Response -match '^5') {
+                        $row.Selected = $false
+                        Set-TargetCheck $row "Rejected: $($ans.Response)"; $result.Rejected++; $done++
+                        $result.Details += "$($row.PrimarySmtpAddress) -> $($row.WillForwardTo): $($row.TargetCheck)"
                     } else {
-                        Set-TargetCheck $row "Error: $(if ($sessionError) { $sessionError } else { 'no reply' })"; $result.Errors++
+                        $lastError[$row.WillForwardTo] = if ($ans) { $ans.Response } elseif ($sessionError) { $sessionError } else { 'no reply' }
+                        $retry += $row
                     }
-                    $result.Details += "$($row.PrimarySmtpAddress) -> $($row.WillForwardTo): $($row.TargetCheck)"
                 }
             }
-            $done += $batch.Count
+            $pending = $retry
+        }
+        foreach ($row in $pending) {
+            $row.Selected = $false
+            Set-TargetCheck $row "Error: $($lastError[$row.WillForwardTo])"; $result.Errors++; $done++
+            $result.Details += "$($row.PrimarySmtpAddress) -> $($row.WillForwardTo): $($row.TargetCheck)"
         }
     }
     if ($OnProgress -and $toCheck.Count) { & $OnProgress $toCheck.Count $toCheck.Count '' }

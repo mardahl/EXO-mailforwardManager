@@ -1,4 +1,5 @@
 . (Join-Path $PSScriptRoot 'TestSupport.ps1')
+$script:SmtpRetryDelaySec = 0   # no real waits in offline tests
 
 function New-Row($addr, $target, $fwd = '', $onPrem = $false) {
     [pscustomobject]@{
@@ -81,5 +82,32 @@ $r = Invoke-TargetValidation -Rows $rows -ResolveMx { 'mx' } -TestPort {} -Check
 $script:SmtpBatchSize = $old
 Assert ($script:batches -eq 3) "Expected 3 sessions for 5 rows at batch 2, got $script:batches."
 Assert ($r.Kept -eq 5) 'All batched rows must be kept.'
+
+# --- Throttling: partial replies kept, 4xx / dropped retried -----------------
+
+$script:session = 0
+$rows = @(1..4 | ForEach-Object { New-Row "u$_@s.com" "ok$_@t.com" })
+$r = Invoke-TargetValidation -Rows $rows -ResolveMx { 'mx' } -TestPort {} -CheckRecipients {
+    param($mx, $addrs)
+    $script:session++
+    if ($script:session -eq 1) {
+        # 1st answered, 2nd throttled (4xx), then session dies before 3rd/4th
+        [pscustomobject]@{ Address = $addrs[0]; Exists = $true; Response = '250 OK' }
+        [pscustomobject]@{ Address = $addrs[1]; Exists = $false; Response = '421 4.7.0 Too many connections' }
+        throw 'connection reset'
+    }
+    foreach ($a in $addrs) { [pscustomobject]@{ Address = $a; Exists = $true; Response = '250 OK' } }
+}
+Assert ($r.Kept -eq 4 -and $r.Errors -eq 0) "Throttled/dropped rows must be retried, got Kept=$($r.Kept) Errors=$($r.Errors)."
+Assert ($script:session -eq 2) "Retry must only resend unanswered rows in one more session, got $script:session."
+
+$script:session = 0
+$rows = @(New-Row 'u@s.com' 'tmp@t.com')
+$r = Invoke-TargetValidation -Rows $rows -ResolveMx { 'mx' } -TestPort {} -CheckRecipients {
+    param($mx, $addrs) $script:session++
+    foreach ($a in $addrs) { [pscustomobject]@{ Address = $a; Exists = $false; Response = '451 4.7.500 Server busy' } }
+}
+Assert ($script:session -eq $script:SmtpMaxAttempts) 'Persistent 4xx must stop after max attempts.'
+Assert (-not $rows[0].Selected -and $rows[0].TargetCheck -like 'Error: 451*' -and $r.Errors -eq 1) 'Persistent 4xx is an error, not a rejection.'
 
 Write-Host 'RecipientCheck tests passed.'
