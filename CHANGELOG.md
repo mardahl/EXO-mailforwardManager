@@ -6,6 +6,17 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-10-01
+
+Stable release of the reworked TUI (see 1.3.0-rc.1 and rc.2 below for the
+menus, popups, colors and progress modals), plus:
+
+- Add: `V` validates selected forwarding targets over SMTP (`RCPT TO` probe
+  against the target domain's MX, e.g. Exchange Online DBEB). A preflight
+  resolves MX and tests outbound TCP 25 first; if either fails, nothing is
+  changed and the report says what to fix. Otherwise rows that already
+  forward, and targets not answered with `250`, are deselected.
+
 ## [1.3.0-rc.2] - 2026-09-21
 
 - Change: popups now use ~80% of the terminal width (minimum 50 columns)
@@ -245,7 +256,10 @@ Initial release.
   CHANGELOG - no source-repo bloat - and attaches it to the GitHub
   release with the matching changelog section as notes.
 
-[Unreleased]: https://github.com/mardahl/EXO-mailforwardManager/compare/v1.1.0...HEAD
+[Unreleased]: https://github.com/mardahl/EXO-mailforwardManager/compare/v1.3.0...HEAD
+[1.3.0]: https://github.com/mardahl/EXO-mailforwardManager/compare/v1.2.1...v1.3.0
+[1.3.0-rc.2]: https://github.com/mardahl/EXO-mailforwardManager/compare/v1.3.0-rc.1...v1.3.0-rc.2
+[1.3.0-rc.1]: https://github.com/mardahl/EXO-mailforwardManager/compare/v1.2.1...v1.3.0-rc.1
 [1.1.0]: https://github.com/mardahl/EXO-mailforwardManager/compare/v1.0.9...v1.1.0
 [1.0.9]: https://github.com/mardahl/EXO-mailforwardManager/compare/v1.0.8...v1.0.9
 [1.0.8]: https://github.com/mardahl/EXO-mailforwardManager/compare/v1.0.7...v1.0.8
