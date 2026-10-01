@@ -6,6 +6,13 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.4.0-rc.1] - 2026-10-01
+
+- Add: mailbox display name column (`Name`) when the console is at least
+  120 columns wide; long names are truncated with an ellipsis. Requires a
+  fresh mailbox fetch (old caches show an empty column).
+- Change: search also matches display names.
+
 ## [1.3.1] - 2026-10-01
 
 Stable release of the 1.3.1 validation fixes (see 1.3.1-rc.1 to rc.4 below
@@ -304,6 +311,7 @@ Initial release.
   release with the matching changelog section as notes.
 
 [Unreleased]: https://github.com/mardahl/EXO-mailforwardManager/compare/v1.3.1...HEAD
+[1.4.0-rc.1]: https://github.com/mardahl/EXO-mailforwardManager/compare/v1.3.1...v1.4.0-rc.1
 [1.3.1]: https://github.com/mardahl/EXO-mailforwardManager/compare/v1.3.0...v1.3.1
 [1.3.1-rc.4]: https://github.com/mardahl/EXO-mailforwardManager/compare/v1.3.1-rc.3...v1.3.1-rc.4
 [1.3.1-rc.3]: https://github.com/mardahl/EXO-mailforwardManager/compare/v1.3.1-rc.2...v1.3.1-rc.3
