@@ -228,3 +228,88 @@ function Get-PreviewFrame {
 
     return [pscustomobject]@{ Frame = $sb.ToString(); LineCount = $lines.Count; BodyHeight = $bodyH; Writes = $writes }
 }
+
+function Get-ResultsFrame {
+    # Apply results, same visual language as Get-PreviewFrame: fixed title +
+    # color-coded summary + log path (rows 1-3), then groups ordered by
+    # urgency (Failed, Applied, Skipped). Failed rows carry the full Exchange
+    # error wrapped underneath so nothing actionable is clipped; persistence
+    # problems (audit log/cache) lead the body in red. -ShowSkipped expands
+    # the Skipped group (collapsed by default).
+    param(
+        [Parameter(Mandatory)]$Result,
+        [Parameter(Mandatory)][int]$Offset,
+        [Parameter(Mandatory)][int]$Width,
+        [Parameter(Mandatory)][int]$Height,
+        [switch]$ShowSkipped
+    )
+    $t = $script:T; $g = $script:G
+    $cell = { param($text, $w) ConvertTo-DisplayText -Text ([string]$text) -Width $w }
+    $recs = @($Result.Records)
+    $groups = [ordered]@{
+        Error   = @{ Label = 'Failed';  Color = $t.Danger; Note = 'not changed - see error' }
+        OK      = @{ Label = 'Applied'; Color = $t.Good;   Note = 'forwarding now active' }
+        Skipped = @{ Label = 'Skipped'; Color = $t.RowDim; Note = 'not touched' }
+    }
+    $actW = 9; $arrow = " $($g.Arrow) "
+    $flex = [Math]::Max(21, $Width - 1 - $actW - 1 - 1 - $arrow.Length)
+    $mbxW = [int]($flex / 3); $oldW = [int]($flex / 3); $newW = $flex - $mbxW - $oldW
+    $indent = 1 + $actW + 1
+
+    $lines = New-Object System.Collections.Generic.List[string]
+    $persist = @($Result.PersistenceErrors | Where-Object { $_ })
+    if ($persist.Count) {
+        $rule = "$($g.H)$($g.H) Attention ($($persist.Count)) $($g.H) log/cache problems "
+        [void]$lines.Add($t.Danger + (& $cell ($rule + ([string]$g.H * [Math]::Max(0, $Width - $rule.Length))) $Width))
+        foreach ($p in $persist) {
+            foreach ($chunk in (Split-DisplayChunks -Text ([string]$p) -Width ($Width - 3))) { [void]$lines.Add('   ' + $t.Warn + (& $cell $chunk ($Width - 3))) }
+        }
+        [void]$lines.Add('')
+    }
+    foreach ($k in $groups.Keys) {
+        $rowsK = @($recs | Where-Object { $_.Result -eq $k })
+        if (-not $rowsK.Count) { continue }
+        $gk = $groups[$k]; $c = $gk.Color
+        $collapsed = $k -eq 'Skipped' -and -not $ShowSkipped
+        $label = " $($gk.Label) ($($rowsK.Count)) $($g.H) $($gk.Note)" + $(if ($collapsed) { ' - press S to show' } else { '' }) + ' '
+        $rule = [string]$g.H + [string]$g.H + $label
+        [void]$lines.Add($c + (& $cell ($rule + ([string]$g.H * [Math]::Max(0, $Width - $rule.Length))) $Width))
+        if ($collapsed) { [void]$lines.Add(''); continue }
+        foreach ($r in $rowsK) {
+            $line = ' ' + $c + (& $cell $gk.Label $actW) + ' ' + $t.Row + (& $cell $r.Mailbox $mbxW) + ' '
+            if ($k -eq 'Skipped') {
+                $line += $t.Warn + (& $cell $r.Error ($oldW + $arrow.Length + $newW))
+            } else {
+                $old = if ($r.OldForwardingSmtpAddress) { $t.RowDim + (& $cell $r.OldForwardingSmtpAddress $oldW) } else { $t.Muted + (& $cell '(none)' $oldW) }
+                $newCol = if ($k -eq 'OK') { $t.Good } else { $t.RowDim }
+                $line += $old + $t.Muted + $arrow + $newCol + (& $cell $r.NewForwardingSmtpAddress $newW)
+            }
+            [void]$lines.Add($line)
+            if ($k -eq 'Error' -and $r.Error) {
+                foreach ($chunk in (Split-DisplayChunks -Text ([string]$r.Error) -Width ($Width - $indent))) {
+                    [void]$lines.Add((' ' * $indent) + $t.Warn + (& $cell $chunk ($Width - $indent)))
+                }
+            }
+        }
+        [void]$lines.Add('')
+    }
+
+    $sb = New-Object System.Text.StringBuilder
+    $title = if ($Result.Errors) { $t.HeaderTxt + $t.Danger } else { $t.HeaderHi }
+    $verdict = if ($Result.Errors -and -not $Result.Applied) { 'nothing applied' } elseif ($Result.Errors) { 'completed with errors' } else { 'completed' }
+    Add-FrameLine -Sb $sb -Row 1 -Content ($t.HeaderBg + $title + (& $cell " Apply results  $($g.V)  $($recs.Count) processed, $verdict" $Width))
+    $sum = ' ' + $t.Good + "$($Result.Applied) Applied" + $t.Muted + '  ' +
+        $(if ($Result.Errors) { $t.Danger } else { $t.RowDim }) + "$($Result.Errors) Failed" + $t.Muted + '  ' +
+        $t.RowDim + "$($Result.Skipped) Skipped"
+    if ($persist.Count) { $sum += $t.Muted + "  $($g.V)  " + $t.Danger + "! $($persist.Count) log/cache problem(s)" }
+    Add-FrameLine -Sb $sb -Row 2 -Content $sum
+    $logTxt = if ($Result.LogPath) { [string]$Result.LogPath } else { '(not written)' }
+    Add-FrameLine -Sb $sb -Row 3 -Content (' ' + $t.Muted + 'Change log: ' + $t.SelMark + (& $cell $logTxt ([Math]::Max(0, $Width - 13))))
+
+    $bodyH = [Math]::Max(1, $Height - 3)
+    for ($i = 0; $i -lt $bodyH; $i++) {
+        $idx = $Offset + $i
+        Add-FrameLine -Sb $sb -Row (4 + $i) -Content $(if ($idx -ge 0 -and $idx -lt $lines.Count) { $lines[$idx] } else { '' })
+    }
+    return [pscustomobject]@{ Frame = $sb.ToString(); LineCount = $lines.Count; BodyHeight = $bodyH }
+}

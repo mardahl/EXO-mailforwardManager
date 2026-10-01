@@ -6,6 +6,11 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+- Change: redesigned Apply results in the style of Preview: verdict title,
+  color-coded summary, change-log path, groups ordered Failed, Applied,
+  Skipped (collapsed, `S` toggles), full wrapped Exchange error under each
+  failed mailbox, log/cache problems highlighted at the top.
+
 - Fix: main table header and rows were one character wider than the
   console, clipping the last column header (`Warn`).
 - Docs: README shows an SVG rendering of the main window

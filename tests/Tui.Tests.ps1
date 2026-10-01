@@ -476,7 +476,7 @@ Test-Case 'Preview: confirmed apply updates only OK rows and survives a search f
         }
     }
     function Show-OperationProgress { param($Progress) }
-    function Show-ReportDialog { param($Title, $Lines) }
+    function Show-ResultsDialog { param($Result) }
     $script:UI.Search = 'user0'
     Update-MailboxView -State $script:UI
     Invoke-TuiKey -Key (New-Key 'p' P)
@@ -1152,6 +1152,26 @@ Test-Case 'Get-PreviewFrame orders groups by risk and colors them' {
     Assert ($r.Frame.Contains('review overwrites')) 'Overwrites must raise a warning in the summary.'
 }
 
+
+Test-Case 'Get-ResultsFrame groups Failed before Applied, wraps full errors, collapses Skipped' {
+    $longErr = 'The operation could not be performed because object ' + ('x' * 150) + ' END'
+    $res = [pscustomobject]@{
+        Records = @(
+            [pscustomobject]@{ Mailbox = 'ok@x.com'; OldForwardingSmtpAddress = ''; NewForwardingSmtpAddress = 'ok@y.com'; Result = 'OK'; Error = '' }
+            [pscustomobject]@{ Mailbox = 'bad@x.com'; OldForwardingSmtpAddress = 'o@y.com'; NewForwardingSmtpAddress = 'bad@y.com'; Result = 'Error'; Error = $longErr }
+            [pscustomobject]@{ Mailbox = 'skip@x.com'; OldForwardingSmtpAddress = ''; NewForwardingSmtpAddress = ''; Result = 'Skipped'; Error = 'On-prem ForwardingAddress set' }
+        )
+        Applied = 1; Skipped = 1; Errors = 1; LogPath = 'C:\t\changelog.csv'; PersistenceErrors = @('Cache update failed: locked')
+    }
+    $r = Get-ResultsFrame -Result $res -Offset 0 -Width 80 -Height 40
+    Assert ($r.Frame.IndexOf('bad@x.com') -lt $r.Frame.IndexOf('ok@x.com')) 'Failed must come before Applied.'
+    Assert ($r.Frame.Contains('END')) 'Full error text must be wrapped, not clipped.'
+    Assert (-not $r.Frame.Contains('skip@x.com')) 'Skipped rows collapse by default.'
+    Assert ($r.Frame.Contains('changelog.csv') -and $r.Frame.Contains('Cache update failed')) 'Log path and persistence errors must show.'
+    Assert ($r.Frame.Contains('completed with errors')) 'Title must state the verdict.'
+    $e = Get-ResultsFrame -Result $res -Offset 0 -Width 80 -Height 40 -ShowSkipped
+    Assert ($e.Frame.Contains('skip@x.com') -and $e.Frame.Contains('On-prem')) 'Expanded Skipped shows mailbox and reason.'
+}
 
 # --- Dialog width and progress modals -----------------------------------------
 Test-Case 'Get-DialogBox uses ~80% of the screen width, clamped to w-4' {

@@ -73,10 +73,7 @@ function Invoke-TuiApply {
             }
         }
         Update-MailboxView -State $script:UI
-        $lines = @("Applied: $($result.Applied)  Skipped: $($result.Skipped)  Errors: $($result.Errors)", "Log: $($result.LogPath)")
-        $lines += @($result.Records | ForEach-Object { "$($_.Mailbox): $($_.Result) $($_.Error)" })
-        $lines += @($result.PersistenceErrors)
-        Show-ReportDialog -Title 'Apply results' -Lines $lines
+        Show-ResultsDialog -Result $result
     }
     $script:UI.Dirty = $true
 }

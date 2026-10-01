@@ -435,6 +435,40 @@ function Show-PreviewDialog {
     }
 }
 
+function Show-ResultsDialog {
+    # Full-screen apply results (Get-ResultsFrame). Read-only: Enter/Esc
+    # close, S toggles skipped rows, arrows/PgUp/PgDn scroll.
+    param([Parameter(Mandatory)]$Result)
+    Clear-DialogKeyQueue
+    $offset = 0; $showSkipped = $false
+    while ($true) {
+        $size = Get-ConsoleSize
+        $w = [Math]::Max(20, $size[0])
+        $f = Get-ResultsFrame -Result $Result -Offset $offset -Width $w -Height ([Math]::Max(4, $size[1] - 1)) -ShowSkipped:$showSkipped
+        $maxOff = [Math]::Max(0, $f.LineCount - $f.BodyHeight)
+        if ($offset -gt $maxOff) { $offset = $maxOff; continue }
+        $sb = New-Object System.Text.StringBuilder
+        [void]$sb.Append("$script:ESC[2J")
+        [void]$sb.Append($f.Frame)
+        $sTxt = if ($showSkipped) { 'S Hide skipped' } else { 'S Show skipped' }
+        $hint = ConvertTo-DisplayText -Text " Enter/Esc close   $sTxt   Up/Down/PgUp/PgDn scroll" -Width $w
+        Add-FrameLine -Sb $sb -Row $size[1] -Content ($script:T.FootBg + (Format-KeyHint -Text $hint))
+        [Console]::Write($sb.ToString())
+
+        $key = Read-DialogKey
+        if (($key.Modifiers -band [ConsoleModifiers]::Control) -and $key.Key -eq 'C') { return }
+        switch ($key.Key) {
+            'Enter'     { return }
+            'Escape'    { return }
+            'UpArrow'   { if ($offset -gt 0) { $offset-- }; continue }
+            'DownArrow' { if ($offset -lt $maxOff) { $offset++ }; continue }
+            'PageUp'    { $offset = [Math]::Max(0, $offset - $f.BodyHeight); continue }
+            'PageDown'  { $offset = [Math]::Min($maxOff, $offset + $f.BodyHeight); continue }
+        }
+        if ([char]::ToUpper($key.KeyChar) -eq 'S') { $showSkipped = -not $showSkipped }
+    }
+}
+
 function Show-ReportDialog {
     # Read-only scrollable report; no return value.
     param(
