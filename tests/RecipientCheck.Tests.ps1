@@ -9,7 +9,11 @@ function New-Row($addr, $target, $fwd = '', $onPrem = $false) {
 
 # --- Invoke-SmtpRcptDialog: protocol over fake streams -----------------------
 
-$server = "220 mx ready`r`n250-mx hello`r`n250 SIZE`r`n250 OK`r`n250 2.1.5 Recipient OK`r`n550 5.4.1 Recipient address rejected`r`n"
+# One transaction per address (EXO allows 1 RCPT per null-sender transaction,
+# else 452 4.5.3): MAIL, RCPT, RSET for each address.
+$server = "220 mx ready`r`n250-mx hello`r`n250 SIZE`r`n" +
+    "250 OK`r`n250 2.1.5 Recipient OK`r`n250 reset`r`n" +
+    "250 OK`r`n550 5.4.1 Recipient address rejected`r`n250 reset`r`n"
 $writer = [System.IO.StringWriter]::new()
 $res = @(Invoke-SmtpRcptDialog -Reader ([System.IO.StringReader]::new($server)) -Writer $writer -Address 'a@t.com', 'b@t.com' -HeloName 'probe')
 Assert ($res.Count -eq 2) 'Expected one result per address.'
@@ -17,6 +21,8 @@ Assert ($res[0].Exists -and -not $res[1].Exists) '250 must mean exists, 550 must
 Assert ($res[1].Response -like '550*') 'Response text must be kept.'
 $sent = $writer.ToString()
 Assert ($sent -match 'EHLO probe' -and $sent -match 'MAIL FROM:<>' -and $sent -match 'RCPT TO:<b@t.com>' -and $sent -match 'QUIT') 'Client commands missing.'
+Assert (([regex]::Matches($sent, 'MAIL FROM:<>')).Count -eq 2) 'Each address needs its own MAIL FROM transaction.'
+Assert (([regex]::Matches($sent, 'RSET')).Count -eq 2) 'Each transaction must be reset.'
 
 $threw = $false
 try { @(Invoke-SmtpRcptDialog -Reader ([System.IO.StringReader]::new("554 go away`r`n")) -Writer ([System.IO.StringWriter]::new()) -Address 'a@t.com') } catch { $threw = $true }

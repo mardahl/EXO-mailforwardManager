@@ -52,11 +52,15 @@ function Invoke-SmtpRcptDialog {
     }
     & $expect '220' 'banner'
     $Writer.WriteLine("EHLO $HeloName");  & $expect '250' 'EHLO'
-    $Writer.WriteLine('MAIL FROM:<>');    & $expect '250' 'MAIL FROM'
+    # One transaction per address: Exchange Online allows a single RCPT per
+    # null-sender (MAIL FROM:<>) transaction and answers the 2nd with
+    # "452 4.5.3 Too many recipients". RSET keeps the session open.
     foreach ($a in $Address) {
+        $Writer.WriteLine('MAIL FROM:<>'); & $expect '250' 'MAIL FROM'
         $Writer.WriteLine("RCPT TO:<$a>")
         $resp = Read-SmtpReply -Reader $Reader
         [pscustomobject]@{ Address = $a; Exists = ($resp -match '^250'); Response = $resp }
+        $Writer.WriteLine('RSET');         & $expect '250' 'RSET'
     }
     try { $Writer.WriteLine('QUIT') } catch { $null = $_ }
 }
