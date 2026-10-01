@@ -6,6 +6,15 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.3.1] - 2026-10-01
+
+Stable release of the 1.3.1 validation fixes (see 1.3.1-rc.1 to rc.4 below
+for SMTP per-recipient probes, throttling retries, recipient-forward
+display/filtering and the grouped validation report with CSV log), plus:
+
+- Add: search mode shows a yellow input field with a blinking caret.
+- Remove: `-Ascii` switch; the TUI always uses Unicode glyphs.
+
 ## [1.3.1-rc.4] - 2026-10-01
 
 - Change: validation results are a compact report: aligned, colored
@@ -294,7 +303,8 @@ Initial release.
   CHANGELOG - no source-repo bloat - and attaches it to the GitHub
   release with the matching changelog section as notes.
 
-[Unreleased]: https://github.com/mardahl/EXO-mailforwardManager/compare/v1.3.1-rc.4...HEAD
+[Unreleased]: https://github.com/mardahl/EXO-mailforwardManager/compare/v1.3.1...HEAD
+[1.3.1]: https://github.com/mardahl/EXO-mailforwardManager/compare/v1.3.0...v1.3.1
 [1.3.1-rc.4]: https://github.com/mardahl/EXO-mailforwardManager/compare/v1.3.1-rc.3...v1.3.1-rc.4
 [1.3.1-rc.3]: https://github.com/mardahl/EXO-mailforwardManager/compare/v1.3.1-rc.2...v1.3.1-rc.3
 [1.3.1-rc.2]: https://github.com/mardahl/EXO-mailforwardManager/compare/v1.3.1-rc.1...v1.3.1-rc.2
