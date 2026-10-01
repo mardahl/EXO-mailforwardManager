@@ -58,6 +58,9 @@ try {
     $noChange.WillForwardTo = $noChange.CurrentForwarding
     $previewNoChange = @(New-ForwardingPreview -Rows @($noChange))
     Assert ($previewNoChange[0].Action -eq 'Skip') 'Unchanged destination must be Skip.'
+    Assert ($previewNoChange[0].SkipReason -like 'already forwards to *') 'Unchanged Skip must explain why.'
+    Assert ($snapshot[1].SkipReason -like 'recipient forward*') 'On-prem Skip must explain why.'
+    Assert (-not $snapshot[0].SkipReason) 'Writes have no skip reason.'
 
     $blankTarget = NewRow 'blank'
     $blankTarget.WillForwardTo = ''

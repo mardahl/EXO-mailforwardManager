@@ -142,43 +142,42 @@ Test-Case 'Get-MailboxFrame tolerates long addresses and control characters with
     Assert ($rows[1].PrimarySmtpAddress.Contains([char]27)) 'Sanitization must be display-only; stored address must be untouched.'
 }
 
-# --- Preview frame: wrapping, recoverability, LineCount ---------------------
-Test-Case 'Get-PreviewFrame wraps addresses reversibly and reports full LineCount' {
+# --- Preview frame: summary, grouping, truncation, LineCount ---------------
+Test-Case 'Get-PreviewFrame truncates long addresses to one line per mailbox' {
     $longAddr = ('user.' * 20) + '@example.com'
     $rows = @([pscustomobject]@{
         PrimarySmtpAddress = $longAddr; CurrentForwarding = 'old@example.net'
-        WillForwardTo = 'new@example.net'; DeliverAndStore = $true; Action = 'Overwrite'
+        WillForwardTo = 'new@example.net'; DeliverAndStore = $true; Action = 'Overwrite'; SkipReason = ''
     })
-    $result = Get-PreviewFrame -Rows $rows -Offset 0 -Width 20 -Height 4
-    Assert ($result.LineCount -gt 4) 'Long address must wrap into more lines than one small viewport.'
-    $wide = Get-PreviewFrame -Rows $rows -Offset 0 -Width 40 -Height $result.LineCount
-    Assert ($wide.Frame -match 'Overwrite') 'Explicit Overwrite text must appear.'
-
-    $full = Get-PreviewFrame -Rows $rows -Offset 0 -Width 20 -Height $result.LineCount
-    $rebuilt = ($full.Frame -split ("$([char]27)\[K")) | ForEach-Object {
-        ($_ -replace ("$([char]27)\[\d+;1H"), '')
-    }
-    $joined = ($rebuilt -join '').Replace($script:T.Row, '').Replace($script:T.Reset, '')
-    Assert ($joined.Contains($longAddr)) 'Wrapped address must be recoverable by concatenating chunks.'
+    $r = Get-PreviewFrame -Rows $rows -Offset 0 -Width 80 -Height 20
+    Assert ($r.LineCount -eq 3) "Group rule + one row + spacer expected, got $($r.LineCount)."
+    Assert ($r.Frame.Contains($script:G.Ell)) 'Long address must be truncated with an ellipsis.'
+    Assert ($r.Writes -eq 1) 'Overwrite counts as a write.'
 }
-Test-Case 'Get-PreviewFrame Skip action renders explicit Skip text' {
+Test-Case 'Get-PreviewFrame collapses Skip by default and shows reason when expanded' {
     $rows = @([pscustomobject]@{
-        PrimarySmtpAddress = 'a@example.com'; CurrentForwarding = ''
-        WillForwardTo = ''; DeliverAndStore = $false; Action = 'Skip'
+        PrimarySmtpAddress = 'a@example.com'; CurrentForwarding = ''; HasOnPremForwarding = $true
+        WillForwardTo = ''; DeliverAndStore = $false; Action = 'Skip'; SkipReason = 'recipient forward set; not changed'
     })
-    $result = Get-PreviewFrame -Rows $rows -Offset 0 -Width 40 -Height 5
-    Assert ($result.Frame -match 'Skip') 'Explicit Skip text must appear.'
+    $c = Get-PreviewFrame -Rows $rows -Offset 0 -Width 100 -Height 10
+    Assert (-not $c.Frame.Contains('a@example.com')) 'Skipped rows must be hidden by default.'
+    Assert ($c.Frame.Contains('press S to show')) 'Collapsed Skip group must hint at S.'
+    Assert ($c.Frame.Contains('Nothing to apply')) 'All-Skip batch must say nothing to apply.'
+    Assert ($c.Writes -eq 0) 'Skip is not a write.'
+    $e = Get-PreviewFrame -Rows $rows -Offset 0 -Width 100 -Height 10 -ShowSkipped
+    Assert ($e.Frame.Contains('a@example.com') -and $e.Frame.Contains('recipient forward')) 'Expanded Skip must list mailbox and reason.'
 }
-Test-Case 'Get-PreviewFrame Offset scrolls without changing LineCount' {
+Test-Case 'Get-PreviewFrame Offset scrolls body without changing LineCount' {
     $rows = New-Rows 10 | ForEach-Object {
         [pscustomobject]@{
             PrimarySmtpAddress = $_.PrimarySmtpAddress; CurrentForwarding = ''
-            WillForwardTo = ''; DeliverAndStore = $false; Action = 'Set'
+            WillForwardTo = 'x@y.com'; DeliverAndStore = $false; Action = 'Set'; SkipReason = ''
         }
     }
-    $a = Get-PreviewFrame -Rows $rows -Offset 0 -Width 40 -Height 5
-    $b = Get-PreviewFrame -Rows $rows -Offset 5 -Width 40 -Height 5
+    $a = Get-PreviewFrame -Rows $rows -Offset 0 -Width 80 -Height 8
+    $b = Get-PreviewFrame -Rows $rows -Offset 5 -Width 80 -Height 8
     Assert ($a.LineCount -eq $b.LineCount) 'LineCount describes the whole body, independent of Offset.'
+    Assert ($a.BodyHeight -eq 5) 'Three fixed header rows are excluded from the body.'
     Assert ($a.Frame -ne $b.Frame) 'Different Offset must render a different window.'
 }
 
@@ -597,7 +596,7 @@ Test-Case 'Show-MailboxDialog Escape cancels without any commit attempt' {
 
 # --- Show-PreviewDialog: Enter never confirms; Y/N are explicit -----------
 Test-Case 'Show-PreviewDialog: Enter is ignored, only explicit Y confirms' {
-    $rows = @([pscustomobject]@{ PrimarySmtpAddress = 'a@example.com'; CurrentForwarding = ''; WillForwardTo = 'a@x.com'; DeliverAndStore = $false; Action = 'Set' })
+    $rows = @([pscustomobject]@{ PrimarySmtpAddress = 'a@example.com'; CurrentForwarding = ''; WillForwardTo = 'a@x.com'; DeliverAndStore = $false; Action = 'Set'; SkipReason = '' })
     $keys = New-Object System.Collections.Generic.Queue[object]
     [void]$keys.Enqueue((New-Key ([char]13) Enter))
     [void]$keys.Enqueue((New-Key 'y' Y))
@@ -606,16 +605,27 @@ Test-Case 'Show-PreviewDialog: Enter is ignored, only explicit Y confirms' {
 }
 
 Test-Case 'Show-PreviewDialog: N cancels' {
-    $rows = @([pscustomobject]@{ PrimarySmtpAddress = 'a@example.com'; CurrentForwarding = ''; WillForwardTo = 'a@x.com'; DeliverAndStore = $false; Action = 'Set' })
+    $rows = @([pscustomobject]@{ PrimarySmtpAddress = 'a@example.com'; CurrentForwarding = ''; WillForwardTo = 'a@x.com'; DeliverAndStore = $false; Action = 'Set'; SkipReason = '' })
     $keys = New-Object System.Collections.Generic.Queue[object]
     [void]$keys.Enqueue((New-Key 'n' N))
     function Read-DialogKey { $keys.Dequeue() }
     Assert (-not (Show-PreviewDialog -Rows $rows)) 'N must cancel the preview.'
 }
 
+Test-Case 'Show-PreviewDialog: Y is inert when everything is Skip; S toggles' {
+    $rows = @([pscustomobject]@{ PrimarySmtpAddress = 'a@example.com'; CurrentForwarding = 'a@x.com'; WillForwardTo = 'a@x.com'; DeliverAndStore = $false; Action = 'Skip'; SkipReason = 'already forwards to a@x.com' })
+    $keys = New-Object System.Collections.Generic.Queue[object]
+    [void]$keys.Enqueue((New-Key 's' S))
+    [void]$keys.Enqueue((New-Key 'y' Y))
+    [void]$keys.Enqueue((New-Key ([char]27) Escape))
+    function Read-DialogKey { $keys.Dequeue() }
+    Assert (-not (Show-PreviewDialog -Rows $rows)) 'Y must not confirm a batch with nothing to write.'
+    Assert ($keys.Count -eq 0) 'S, Y and Escape must all be consumed.'
+}
+
 # --- Modals below 80x20 floor: Test-TuiBelowFloor blocks commits -----------
 Test-Case 'Show-PreviewDialog rejects Y below floor, then cancels with Escape' {
-    $rows = @([pscustomobject]@{ PrimarySmtpAddress = 'a@example.com'; CurrentForwarding = ''; WillForwardTo = 'a@x.com'; DeliverAndStore = $false; Action = 'Set' })
+    $rows = @([pscustomobject]@{ PrimarySmtpAddress = 'a@example.com'; CurrentForwarding = ''; WillForwardTo = 'a@x.com'; DeliverAndStore = $false; Action = 'Set'; SkipReason = '' })
     $keys = New-Object System.Collections.Generic.Queue[object]
     # Queued keys: Y while undersized (must not return), then Escape to cancel
     [void]$keys.Enqueue((New-Key 'y' Y))
@@ -627,7 +637,7 @@ Test-Case 'Show-PreviewDialog rejects Y below floor, then cancels with Escape' {
 }
 
 Test-Case 'Show-PreviewDialog rejects Y below floor, then confirms when resized back' {
-    $rows = @([pscustomobject]@{ PrimarySmtpAddress = 'a@example.com'; CurrentForwarding = ''; WillForwardTo = 'a@x.com'; DeliverAndStore = $false; Action = 'Set' })
+    $rows = @([pscustomobject]@{ PrimarySmtpAddress = 'a@example.com'; CurrentForwarding = ''; WillForwardTo = 'a@x.com'; DeliverAndStore = $false; Action = 'Set'; SkipReason = '' })
     $keys = New-Object System.Collections.Generic.Queue[object]
     $sizes = New-Object System.Collections.Generic.Queue[object]
     # First iteration: undersized, Y ignored
@@ -1117,17 +1127,21 @@ Test-Case 'Get-MailboxFrame header highlights the selected count when non-zero' 
 }
 
 # --- Preview coloring ---------------------------------------------------------
-Test-Case 'Get-PreviewFrame colors action tags Set/Overwrite/Skip without changing LineCount' {
+Test-Case 'Get-PreviewFrame orders groups by risk and colors them' {
     $rows = @(
-        [pscustomobject]@{ PrimarySmtpAddress = 'a@x.com'; CurrentForwarding = ''; WillForwardTo = 'a@y.com'; DeliverAndStore = $false; Action = 'Set' },
-        [pscustomobject]@{ PrimarySmtpAddress = 'b@x.com'; CurrentForwarding = 'o@y.com'; WillForwardTo = 'b@y.com'; DeliverAndStore = $true; Action = 'Overwrite' },
-        [pscustomobject]@{ PrimarySmtpAddress = 'c@x.com'; CurrentForwarding = 'c@y.com'; WillForwardTo = 'c@y.com'; DeliverAndStore = $false; Action = 'Skip' }
+        [pscustomobject]@{ PrimarySmtpAddress = 'a@x.com'; CurrentForwarding = ''; WillForwardTo = 'a@y.com'; DeliverAndStore = $false; Action = 'Set'; SkipReason = '' },
+        [pscustomobject]@{ PrimarySmtpAddress = 'b@x.com'; CurrentForwarding = 'o@y.com'; WillForwardTo = 'b@y.com'; DeliverAndStore = $true; Action = 'Overwrite'; SkipReason = '' },
+        [pscustomobject]@{ PrimarySmtpAddress = 'c@x.com'; CurrentForwarding = 'c@y.com'; WillForwardTo = 'c@y.com'; DeliverAndStore = $false; Action = 'Skip'; SkipReason = 'already forwards to c@y.com' }
     )
-    $r = Get-PreviewFrame -Rows $rows -Offset 0 -Width 80 -Height 20
-    Assert ($r.LineCount -eq 12) "Three records of four lines each, got $($r.LineCount)."
-    Assert ($r.Frame.Contains($script:T.Good + '[Set]')) 'Set must be green.'
-    Assert ($r.Frame.Contains($script:T.Proposed + '[Overwrite]')) 'Overwrite must be amber.'
-    Assert ($r.Frame.Contains($script:T.RowDim + '[Skip]')) 'Skip must be dim.'
+    $r = Get-PreviewFrame -Rows $rows -Offset 0 -Width 100 -Height 20 -ShowSkipped
+    Assert ($r.Writes -eq 2) "Set + Overwrite = 2 writes, got $($r.Writes)."
+    Assert ($r.Frame.IndexOf('b@x.com') -lt $r.Frame.IndexOf('a@x.com')) 'Overwrite group must come before Set.'
+    Assert ($r.Frame.IndexOf('a@x.com') -lt $r.Frame.IndexOf('c@x.com')) 'Set group must come before Skip.'
+    Assert ($r.Frame.Contains($script:T.Proposed + 'Overwrite')) 'Overwrite must be amber.'
+    Assert ($r.Frame.Contains($script:T.Good + 'Set')) 'Set must be green.'
+    Assert ($r.Frame.Contains('(none)')) 'Blank current forward must read (none).'
+    Assert ($r.Frame.Contains('Mixed') -and $r.Frame.Contains('Keep')) 'Mixed keep-copy must show summary + column.'
+    Assert ($r.Frame.Contains('review overwrites')) 'Overwrites must raise a warning in the summary.'
 }
 
 

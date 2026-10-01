@@ -149,48 +149,82 @@ function Split-DisplayChunks {
 }
 
 function Get-PreviewFrame {
-    # Renders wrapped labeled records (old/proposed destination, keep-copy,
-    # explicit Overwrite/Skip/Set text) for the forwarding-preview dialog.
-    # LineCount describes the complete wrapped body (independent of Offset)
-    # so the caller can scroll to the end.
+    # Forwarding preview: fixed title + color-coded summary + column header
+    # (rows 1-3), then one line per mailbox grouped by risk (Overwrite, Set,
+    # Skip). Offset scrolls the body only; LineCount/BodyHeight describe the
+    # complete body so the caller can clamp scrolling. Colors carry meaning:
+    # amber = replaces an existing forward, green = new forward, gray = no
+    # change. -ShowSkipped expands the Skip group (collapsed by default).
     param(
         [Parameter(Mandatory)][AllowEmptyCollection()][array]$Rows,
         [Parameter(Mandatory)][int]$Offset,
         [Parameter(Mandatory)][int]$Width,
-        [Parameter(Mandatory)][int]$Height
+        [Parameter(Mandatory)][int]$Height,
+        [switch]$ShowSkipped
     )
-    $t = $script:T
-    $lines = New-Object System.Collections.Generic.List[object]
-    foreach ($r in $Rows) {
-        foreach ($chunk in (Split-DisplayChunks -Text ([string]$r.PrimarySmtpAddress) -Width $Width)) {
-            [void]$lines.Add(@{ Text = $chunk; Tag = '' })
+    $t = $script:T; $g = $script:G
+    $groups = [ordered]@{
+        Overwrite = @{ Color = $t.Proposed; Note = 'replaces existing forwarding' }
+        Set       = @{ Color = $t.Good;     Note = 'new forwarding' }
+        Skip      = @{ Color = $t.RowDim;   Note = 'not changed' }
+    }
+    $by = @{}
+    foreach ($k in $groups.Keys) { $by[$k] = @($Rows | Where-Object { $_.Action -eq $k }) }
+    $keepYes = @($Rows | Where-Object DeliverAndStore).Count
+    $keepMixed = $keepYes -gt 0 -and $keepYes -lt $Rows.Count
+
+    # Columns: Action | Mailbox | Current -> New [| Keep when mixed]
+    $actW = 9; $arrow = " $($g.Arrow) "; $keepW = if ($keepMixed) { 5 } else { 0 }
+    $flex = [Math]::Max(21, $Width - 1 - $actW - 1 - 1 - $arrow.Length - $(if ($keepW) { $keepW + 1 } else { 0 }))
+    $mbxW = [int]($flex / 3); $curW = [int]($flex / 3); $newW = $flex - $mbxW - $curW
+    $cell = { param($text, $w) ConvertTo-DisplayText -Text ([string]$text) -Width $w }
+
+    $lines = New-Object System.Collections.Generic.List[string]
+    foreach ($k in $groups.Keys) {
+        $rowsK = $by[$k]
+        if (-not $rowsK.Count) { continue }
+        $c = $groups[$k].Color
+        $collapsed = $k -eq 'Skip' -and -not $ShowSkipped
+        $label = " $k ($($rowsK.Count)) $($g.H) $($groups[$k].Note)" + $(if ($collapsed) { ' - press S to show' } else { '' }) + ' '
+        $rule = [string]$g.H + [string]$g.H + $label
+        [void]$lines.Add($c + (& $cell ($rule + ([string]$g.H * [Math]::Max(0, $Width - $rule.Length))) $Width))
+        if ($collapsed) { [void]$lines.Add(''); continue }
+        foreach ($r in $rowsK) {
+            $line = ' ' + $c + (& $cell $k $actW) + ' ' + $t.Row + (& $cell $r.PrimarySmtpAddress $mbxW) + ' '
+            if ($k -eq 'Skip') {
+                $why = if ($r.HasOnPremForwarding) { $t.Warn } else { $t.Muted }
+                $line += $why + (& $cell $r.SkipReason ($curW + $arrow.Length + $newW))
+            } else {
+                $cur = if ($r.CurrentForwarding) { $t.RowDim + (& $cell $r.CurrentForwarding $curW) } else { $t.Muted + (& $cell '(none)' $curW) }
+                $line += $cur + $t.Muted + $arrow + $c + (& $cell $r.WillForwardTo $newW)
+            }
+            if ($keepW) {
+                $line += ' ' + $(if ($r.DeliverAndStore) { $t.KeepOn + (& $cell 'Yes' $keepW) } else { $t.Muted + (& $cell 'No' $keepW) })
+            }
+            [void]$lines.Add($line)
         }
-        $old = [string]$r.CurrentForwarding
-        $new = [string]$r.WillForwardTo
-        foreach ($chunk in (Split-DisplayChunks -Text "  $old -> $new" -Width $Width)) {
-            [void]$lines.Add(@{ Text = $chunk; Tag = '' })
-        }
-        $keep = if ($r.DeliverAndStore) { 'Yes' } else { 'No' }
-        [void]$lines.Add(@{ Text = "  Keep copy: $keep  "; Tag = "[$($r.Action)]" })
-        [void]$lines.Add(@{ Text = ''; Tag = '' })
+        [void]$lines.Add('')
     }
 
     $sb = New-Object System.Text.StringBuilder
-    for ($row = 1; $row -le $Height; $row++) {
-        $idx = $Offset + $row - 1
-        $content = ''
-        if ($idx -ge 0 -and $idx -lt $lines.Count) {
-            $l = $lines[$idx]
-            if ($l.Tag) {
-                $tagCol = switch ($l.Tag) { '[Set]' { $t.Good } '[Overwrite]' { $t.Proposed } '[Skip]' { $t.RowDim } default { $t.Row } }
-                $textW = [Math]::Max(0, $Width - $l.Tag.Length)
-                $content = $t.Row + (ConvertTo-DisplayText -Text $l.Text -Width $textW) + $tagCol + (ConvertTo-DisplayText -Text $l.Tag -Width $l.Tag.Length)
-            } else {
-                $content = $t.Row + (ConvertTo-DisplayText -Text $l.Text -Width $Width)
-            }
-        }
-        Add-FrameLine -Sb $sb -Row $row -Content $content
+    # Row 1: title. Row 2: summary chips. Row 3: column header.
+    $writes = $by.Overwrite.Count + $by.Set.Count
+    Add-FrameLine -Sb $sb -Row 1 -Content ($t.HeaderHi + (& $cell " Preview forwarding changes  $($g.V)  $($Rows.Count) selected, $writes to write" $Width))
+    $keepTxt = if ($keepMixed) { $t.Warn + 'Mixed' } elseif ($keepYes) { $t.KeepOn + 'Yes' } else { $t.Muted + 'No' }
+    $sum = ' ' + $t.Proposed + "$($by.Overwrite.Count) Overwrite" + $t.Muted + '  ' + $t.Good + "$($by.Set.Count) Set" + $t.Muted + '  ' +
+        $t.RowDim + "$($by.Skip.Count) Skip" + $t.Muted + "  $($g.V)  Keep: " + $keepTxt
+    if ($by.Overwrite.Count) { $sum += $t.Muted + "  $($g.V)  " + $t.Warn + "! review overwrites" }
+    if (-not $writes) { $sum += $t.Muted + "  $($g.V)  " + $t.Warn + 'Nothing to apply' }
+    Add-FrameLine -Sb $sb -Row 2 -Content $sum
+    $head = ' ' + (& $cell 'Action' $actW) + ' ' + (& $cell 'Mailbox' $mbxW) + ' ' + (& $cell 'Current' $curW) + (' ' * $arrow.Length) + (& $cell 'New' $newW)
+    if ($keepW) { $head += ' ' + (& $cell 'Keep' $keepW) }
+    Add-FrameLine -Sb $sb -Row 3 -Content ($t.ColHead + $head)
+
+    $bodyH = [Math]::Max(1, $Height - 3)
+    for ($i = 0; $i -lt $bodyH; $i++) {
+        $idx = $Offset + $i
+        Add-FrameLine -Sb $sb -Row (4 + $i) -Content $(if ($idx -ge 0 -and $idx -lt $lines.Count) { $lines[$idx] } else { '' })
     }
 
-    return [pscustomobject]@{ Frame = $sb.ToString(); LineCount = $lines.Count }
+    return [pscustomobject]@{ Frame = $sb.ToString(); LineCount = $lines.Count; BodyHeight = $bodyH; Writes = $writes }
 }

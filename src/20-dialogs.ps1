@@ -394,17 +394,21 @@ function Show-PreviewDialog {
     # never apply a batch. Returns $true only on an explicit Y.
     param([Parameter(Mandatory)][AllowEmptyCollection()][array]$Rows)
     Clear-DialogKeyQueue
-    $offset = 0
+    $offset = 0; $showSkipped = $false
     while ($true) {
         $size = Get-ConsoleSize
-        $bodyH = [Math]::Max(4, $size[1] - 1)
         $bodyW = [Math]::Max(20, $size[0])
-        $preview = Get-PreviewFrame -Rows $Rows -Offset $offset -Width $bodyW -Height $bodyH
+        $preview = Get-PreviewFrame -Rows $Rows -Offset $offset -Width $bodyW -Height ([Math]::Max(4, $size[1] - 1)) -ShowSkipped:$showSkipped
+        $bodyH = $preview.BodyHeight
+        $maxOff = [Math]::Max(0, $preview.LineCount - $bodyH)
+        if ($offset -gt $maxOff) { $offset = $maxOff; continue }
 
         $sb = New-Object System.Text.StringBuilder
         [void]$sb.Append("$script:ESC[2J")
         [void]$sb.Append($preview.Frame)
-        $hint = ConvertTo-DisplayText -Text " $($Rows.Count) selected - Up/Down/PgUp/PgDn scroll  Y apply  N/Esc cancel" -Width $bodyW
+        $yTxt = if ($preview.Writes) { "Y Write $($preview.Writes) change(s)" } else { 'Nothing to apply' }
+        $sTxt = if ($showSkipped) { 'S Hide skipped' } else { 'S Show skipped' }
+        $hint = ConvertTo-DisplayText -Text " $yTxt   $sTxt   Up/Down/PgUp/PgDn scroll   N/Esc cancel" -Width $bodyW
         $colored = (Format-KeyHint -Text $hint).Replace($script:T.HotKey + 'Y', $script:T.FootBg + $script:T.Good + 'Y').Replace($script:T.HotKey + 'N/Esc', $script:T.FootBg + $script:T.Danger + 'N/Esc')
         Add-FrameLine -Sb $sb -Row $size[1] -Content ($script:T.FootBg + $colored)
         [Console]::Write($sb.ToString())
@@ -413,18 +417,20 @@ function Show-PreviewDialog {
         if (($key.Modifiers -band [ConsoleModifiers]::Control) -and $key.Key -eq 'C') { return $false }
         switch ($key.Key) {
             'UpArrow'   { if ($offset -gt 0) { $offset-- }; continue }
-            'DownArrow' { if ($offset -lt [Math]::Max(0, $preview.LineCount - $bodyH)) { $offset++ }; continue }
+            'DownArrow' { if ($offset -lt $maxOff) { $offset++ }; continue }
             'PageUp'    { $offset = [Math]::Max(0, $offset - $bodyH); continue }
-            'PageDown'  { $offset = [Math]::Min([Math]::Max(0, $preview.LineCount - $bodyH), $offset + $bodyH); continue }
+            'PageDown'  { $offset = [Math]::Min($maxOff, $offset + $bodyH); continue }
             'Escape'    { return $false }
         }
         $upper = [char]::ToUpper($key.KeyChar)
         if ($upper -eq 'N') { return $false }
+        if ($upper -eq 'S') { $showSkipped = -not $showSkipped; continue }
         # Below the 80x20 floor the frame itself may be truncated/garbled;
         # never let Y commit a batch of writes against a layout the operator
         # cannot actually read in full. Resizing back above the floor makes
-        # Y work again on the next loop iteration.
-        if ($upper -eq 'Y' -and -not (Test-TuiBelowFloor)) { return $true }
+        # Y work again on the next loop iteration. All-Skip batches have
+        # nothing to write, so Y is inert there too.
+        if ($upper -eq 'Y' -and $preview.Writes -and -not (Test-TuiBelowFloor)) { return $true }
         # Any other key (including Enter) is ignored - confirmation is Y/N only.
     }
 }

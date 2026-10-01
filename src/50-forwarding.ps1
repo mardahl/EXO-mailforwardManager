@@ -26,6 +26,9 @@ function New-ForwardingPreview {
             ForwardingPrefix    = $r.ForwardingPrefix
             WillForwardTo       = $r.WillForwardTo
             Action              = $action
+            SkipReason          = if ($r.HasOnPremForwarding) { 'recipient forward set; not changed' }
+                                  elseif ($action -eq 'Skip') { "already forwards to $($r.WillForwardTo)" }
+                                  else { '' }
         }
     }
 }
