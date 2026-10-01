@@ -14,7 +14,9 @@ function New-ForwardingPreview {
         }
         $action =
             if ($r.HasOnPremForwarding) { 'Skip' }
-            elseif ($r.WillForwardTo -eq $r.CurrentForwarding) { 'Skip' }
+            # Same address is only a no-op when keep-copy also matches;
+            # a keep-copy-only change (K) is a real write.
+            elseif ($r.WillForwardTo -eq $r.CurrentForwarding -and [bool]$r.DeliverAndStore -eq [bool]$r.CurrentDeliverAndStore) { 'Skip' }
             elseif ([string]::IsNullOrEmpty($r.CurrentForwarding)) { 'Set' }
             else { 'Overwrite' }
         [pscustomobject]@{
@@ -23,6 +25,7 @@ function New-ForwardingPreview {
             CurrentForwarding   = $r.CurrentForwarding
             HasOnPremForwarding = $r.HasOnPremForwarding
             DeliverAndStore     = $r.DeliverAndStore
+            CurrentDeliverAndStore = [bool]$r.CurrentDeliverAndStore
             ForwardingPrefix    = $r.ForwardingPrefix
             WillForwardTo       = $r.WillForwardTo
             Action              = $action
@@ -74,6 +77,16 @@ function Set-MailboxForwards {
             }
             $old = $r.CurrentForwarding
             $new = $r.WillForwardTo
+            if ($r.Action -eq 'Skip' -and -not $r.HasOnPremForwarding) {
+                # Preview already decided this is a no-op; never send it.
+                $log.Add([pscustomobject]@{
+                    Timestamp=(Get-Date).ToString('o'); Mailbox=$r.PrimarySmtpAddress
+                    OldForwardingSmtpAddress=$old; NewForwardingSmtpAddress=$new
+                    DeliverToMailboxAndForward=$r.DeliverAndStore
+                    Result='Skipped'; Error="Already forwards to $new"
+                })
+                continue
+            }
             if ($r.HasOnPremForwarding) {
                 $log.Add([pscustomobject]@{
                     Timestamp=(Get-Date).ToString('o'); Mailbox=$r.PrimarySmtpAddress

@@ -69,6 +69,7 @@ function Invoke-TuiApply {
             foreach ($row in $script:UI.Items) {
                 if ($row.PrimarySmtpAddress -eq $record.Mailbox) {
                     $row.CurrentForwarding = $record.NewForwardingSmtpAddress
+                    $row | Add-Member -NotePropertyName CurrentDeliverAndStore -NotePropertyValue ([bool]$record.DeliverToMailboxAndForward) -Force
                 }
             }
         }

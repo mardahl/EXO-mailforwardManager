@@ -56,6 +56,7 @@ try {
 
     $noChange = NewRow 'same'
     $noChange.WillForwardTo = $noChange.CurrentForwarding
+    $noChange | Add-Member -NotePropertyName CurrentDeliverAndStore -NotePropertyValue $true
     $previewNoChange = @(New-ForwardingPreview -Rows @($noChange))
     Assert ($previewNoChange[0].Action -eq 'Skip') 'Unchanged destination must be Skip.'
     Assert ($previewNoChange[0].SkipReason -like 'already forwards to *') 'Unchanged Skip must explain why.'
@@ -125,6 +126,28 @@ try {
         Assert (@(Get-ChildItem $script:ScriptDir -Filter 'changelog-*.csv').Count -eq 0) 'Aborted call must not write an audit file.'
     }
 } catch { $failures.Add("Mixed valid+invalid: $_") }
+
+# --- Preview Skip is honored by Apply; keep-copy-only change is a write -----
+
+try {
+    $same = NewRow 'same'
+    $same.WillForwardTo = $same.CurrentForwarding
+    $same | Add-Member -NotePropertyName CurrentDeliverAndStore -NotePropertyValue $true
+    $keepOnly = NewRow 'keeponly'
+    $keepOnly.WillForwardTo = $keepOnly.CurrentForwarding
+    $keepOnly | Add-Member -NotePropertyName CurrentDeliverAndStore -NotePropertyValue $false
+    $p = @(New-ForwardingPreview -Rows @($same, $keepOnly))
+    Assert ($p[0].Action -eq 'Skip') 'Same address + same keep-copy must be Skip.'
+    Assert ($p[1].Action -eq 'Overwrite') 'Keep-copy-only change must be a write, not Skip.'
+    $script:Calls = @()
+    WithTempScriptDir {
+        $result = Set-MailboxForwards -Rows $p
+        Assert ($script:Calls -notcontains 'same@example.com') 'Preview Skip row must never reach Exchange.'
+        Assert ($script:Calls -contains 'keeponly@example.com') 'Keep-copy-only change must be applied.'
+        Assert ($result.Skipped -eq 1 -and $result.Applied -eq 1) "Expected 1 applied/1 skipped, got $($result.Applied)/$($result.Skipped)."
+        Assert (($result.Records | Where-Object Mailbox -eq 'same@example.com').Error -like 'Already forwards to *') 'Skip must record its reason.'
+    }
+} catch { $failures.Add("Preview Skip honored: $_") }
 
 # --- On-prem rows skipped even with an invalid draft destination ------------
 

@@ -6,11 +6,16 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.4.1] - 2026-10-01
+
+- Fix: mailboxes Preview marks as Skip (already forwarding to the target
+  with the same keep-copy setting) are no longer sent to Exchange on Apply;
+  they are reported as Skipped, so Preview and results counts match.
+  A keep-copy-only change is now previewed as Overwrite instead of Skip.
 - Change: redesigned Apply results in the style of Preview: verdict title,
   color-coded summary, change-log path, groups ordered Failed, Applied,
   Skipped (collapsed, `S` toggles), full wrapped Exchange error under each
   failed mailbox, log/cache problems highlighted at the top.
-
 - Fix: main table header and rows were one character wider than the
   console, clipping the last column header (`Warn`).
 - Docs: README shows an SVG rendering of the main window
@@ -343,7 +348,8 @@ Initial release.
   CHANGELOG - no source-repo bloat - and attaches it to the GitHub
   release with the matching changelog section as notes.
 
-[Unreleased]: https://github.com/mardahl/EXO-mailforwardManager/compare/v1.4.0...HEAD
+[Unreleased]: https://github.com/mardahl/EXO-mailforwardManager/compare/v1.4.1...HEAD
+[1.4.1]: https://github.com/mardahl/EXO-mailforwardManager/compare/v1.4.0...v1.4.1
 [1.4.0]: https://github.com/mardahl/EXO-mailforwardManager/compare/v1.3.1...v1.4.0
 [1.4.0-rc.3]: https://github.com/mardahl/EXO-mailforwardManager/compare/v1.4.0-rc.2...v1.4.0-rc.3
 [1.4.0-rc.2]: https://github.com/mardahl/EXO-mailforwardManager/compare/v1.4.0-rc.1...v1.4.0-rc.2

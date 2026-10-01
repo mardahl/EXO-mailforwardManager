@@ -17,6 +17,7 @@ function New-MailboxRows {
             HasOnPremForwarding = [bool]$m.HasOnPremForwardingAddress
             ForwardingRecipient = [string]$m.ForwardingRecipient
             DeliverAndStore     = [bool]$Config.DeliverToMailboxAndForward
+            CurrentDeliverAndStore = [bool]$m.DeliverToMailboxAndForward
             ForwardingPrefix    = $prefix
             WillForwardTo       = $willTo
             TargetCheck         = ''
@@ -118,6 +119,7 @@ function Merge-MailboxRefresh {
         if ($byAddr.ContainsKey($row.PrimarySmtpAddress)) {
             $m = $byAddr[$row.PrimarySmtpAddress]
             $row.CurrentForwarding   = $m.ForwardingSmtpAddress
+            $row | Add-Member -NotePropertyName CurrentDeliverAndStore -NotePropertyValue ([bool]$m.DeliverToMailboxAndForward) -Force
             $row | Add-Member -NotePropertyName DisplayName -NotePropertyValue ([string]$m.DisplayName) -Force
             $row.HasOnPremForwarding = [bool]$m.HasOnPremForwardingAddress
             $row | Add-Member -NotePropertyName ForwardingRecipient -NotePropertyValue ([string]$m.ForwardingRecipient) -Force
