@@ -46,6 +46,10 @@ function Connect-Exo {
             PageSize    = 100
         }
         Write-Host "Sign in as $($Script:Config.ServiceAccountUPN) when prompted."
+        # After the sign-in window closes, Connect-ExchangeOnline keeps
+        # blocking while it builds the session (often 10-60s, no output).
+        # ponytail: static text, not a spinner - the call is synchronous.
+        Write-Host 'After signing in, Exchange Online sets up the session. This can take up to a minute; errors will appear here.' -ForegroundColor DarkGray
         # Snapshot connection IDs before dialing so the connection(s) this
         # call actually creates can be told apart from any pre-existing
         # (borrowed) connection already in this process - Disconnect-
@@ -91,6 +95,7 @@ function Connect-Exo {
             Where-Object { $_.ConnectionId -and $_.ConnectionId -notin $before } |
             ForEach-Object { $_.ConnectionId })
         $script:ExoOwnedConnectionIds = @($script:ExoOwnedConnectionIds) + $newIds
+        Write-Host 'Connected to Exchange Online. Loading mailboxes...' -ForegroundColor Green
         $Script:ExoPagingConfigured = $true
     }
 }
