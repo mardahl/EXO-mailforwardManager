@@ -12,7 +12,7 @@ function Get-TableLayout {
     # width remains, per spec: "three address columns share remaining
     # width" / "flags compact".
     param([Parameter(Mandatory)][int]$Width)
-    $sel = 3; $keep = 4; $warn = 4; $gaps = 5 # Sel|Addr|Addr|Addr|Keep|Warn = 5 gaps
+    $sel = 3; $keep = 4; $warn = 4; $gaps = 6 # leading space + 5 gaps between Sel|Addr|Addr|Addr|Keep|Warn
     $fixed = $sel + $keep + $warn + $gaps
     $flex = $Width - $fixed
     if ($flex -lt 21) { $flex = 21 }

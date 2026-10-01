@@ -6,6 +6,11 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+- Fix: main table header and rows were one character wider than the
+  console, clipping the last column header (`Warn`).
+- Docs: README shows an SVG rendering of the main window
+  (`scripts/New-ReadmeScreenshot.ps1` regenerates it).
+
 ## [1.4.0] - 2026-10-01
 
 Stable release of 1.4.0-rc.1 to rc.3 (see below): display name column on

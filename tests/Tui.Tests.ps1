@@ -63,6 +63,14 @@ Test-Case 'ConvertTo-DisplayText handles empty text and zero width' {
     Assert ((ConvertTo-DisplayText -Text 'x' -Width 0) -eq '') 'Zero width must return empty string.'
 }
 
+Test-Case 'Get-MailboxFrame header and rows fill exactly Width (no wrap/clip)' {
+    foreach ($w in 80, 130) {
+        $frame = Get-MailboxFrame -State (New-State (New-Rows 2)) -Width $w -Height 20
+        $lens = @($frame -split "$([char]27)\[\d+;1H" | Select-Object -Skip 1 -First 5 | ForEach-Object { ($_ -replace "$([char]27)\[[0-9;]*[mK]", '').Length })
+        Assert (-not ($lens | Where-Object { $_ -ne $w })) "Width $w rendered line lengths $($lens -join ',')."
+    }
+}
+
 # --- Undersized-terminal guidance ------------------------------------------
 Test-Case 'Get-MailboxFrame flags an undersized terminal' {
     $state = New-State (New-Rows 0)

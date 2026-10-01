@@ -20,15 +20,7 @@ Copy `config.example.json` to `config.json` and fill in the target domain and se
 
 The tool lists every user mailbox (cached locally), lets you search/filter and select the mailboxes to update, edit the forwarding prefix per row, then **Preview → Apply**. A timestamped changelog CSV is written per apply-run.
 
-```
- ExoMft  Account: svc-migration@source.example.com  Cache: 2026-09-10T08:00:00Z
- Visible: 3/3  Selected: 1 (0 hidden)  Search: ''  Filter: All
-    Mailbox                  Current forwarding       Proposed forwarding        Keep Warn
- [x] alice@source.example.com                          alice@target.example.com  Yes
- [ ] bob@source.example.com   bob@target.example.com    bob@target.example.com    Yes
- [ ] carol@source.example.com                           carol@target.example.com  Yes  Y
- Enter Actions  M Menu  Space Sel  / Search  P Preview  ? Help  Q Quit
-```
+![Main window: mailbox list with display names, current and proposed forwarding, selection and keep-copy flags](docs/screenshot-main.svg)
 
 ---
 
