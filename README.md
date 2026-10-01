@@ -106,7 +106,8 @@ Dry-run config + connectivity without touching mailboxes:
 4. The header shows **Selected: N (M hidden)**. Preview includes every selected mailbox, even those hidden by the current filter.
 5. Press **P** to preview, review every destination, then **Y** to apply (**N**/Esc cancels; Enter alone never applies).
 
-- `Enter` opens an action menu for the highlighted mailbox (Select/Deselect, Edit forwarding, Keep copy on/off, Preview & apply). `M` opens the global Actions menu (select all, clear, filter, search, preview, refresh, settings, help, quit). Every menu item shows its hotkey; the same letters work directly on the table.
+- `Enter` opens an action menu for the highlighted mailbox (Select/Deselect, Edit forwarding, Keep copy on/off, Preview & apply). `M` opens the global Actions menu (select all, clear, filter, search, validate targets, preview, refresh, settings, help, quit). Every menu item shows its hotkey; the same letters work directly on the table.
+- `V` validates the selected rows' targets: resolves the target domain's MX, checks outbound TCP 25 (aborts with guidance if blocked), then sends `RCPT TO` per target (no mail is sent). Rows that already forward, and targets not accepted with `250`, are deselected. Typical flow: `F` to NoForward, `A`, `V`, `P`.
 - Color legend: **blue bar** = where input goes now (cursor row, focused field, highlighted menu item); **cyan** = selected mailboxes; **yellow** = a key to press; **amber** = proposed forwarding that will change on apply; **red** = warning / cancel; **green** = keep-copy on / apply.
 
 **Deliver+Store is not a selection control.** It controls whether incoming mail is kept in the source mailbox as well as forwarded. Apply reports numeric totals for applied, skipped, and failed mailboxes, including single-mailbox runs.

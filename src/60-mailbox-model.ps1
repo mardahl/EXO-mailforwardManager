@@ -17,6 +17,7 @@ function New-MailboxRows {
             DeliverAndStore     = [bool]$Config.DeliverToMailboxAndForward
             ForwardingPrefix    = $prefix
             WillForwardTo       = $willTo
+            TargetCheck         = ''
         }
     }
 }
@@ -101,6 +102,7 @@ function Set-MailboxDraft {
     $Row.ForwardingPrefix = $Prefix
     $Row.DeliverAndStore  = $DeliverAndStore
     $Row.WillForwardTo    = $willTo
+    $Row | Add-Member -NotePropertyName TargetCheck -NotePropertyValue '' -Force   # edit invalidates prior SMTP check
 }
 
 function Merge-MailboxRefresh {

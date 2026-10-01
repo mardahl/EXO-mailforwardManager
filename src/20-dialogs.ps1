@@ -539,7 +539,8 @@ function Show-OperationProgress {
     $probe = Get-DialogBox -BodyHeight 1
     $barW = [Math]::Max(10, $probe.InnerW - 8)
     $bar = Get-ProgressBar -Index $index -Total $total -Width $barW
-    [void](Write-DialogFrame -Title "Applying forwarding $index/$total" -BodyLines @(
+    $title = if ($Progress.Title) { [string]$Progress.Title } else { "Applying forwarding $index/$total" }
+    [void](Write-DialogFrame -Title $title -BodyLines @(
         '',
         @{ Text = "$bar $($pct.ToString().PadLeft(3))%"; Style = 'Row' },
         '',

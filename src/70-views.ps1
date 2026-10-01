@@ -105,7 +105,7 @@ function Get-MailboxFrame {
 
     # Footer: key hints + status.
     $status = if ($State.Status) { [string]$State.Status } else { '' }
-    $foot = ConvertTo-DisplayText -Text (' Enter Actions  M Menu  Space Sel  / Search  P Preview  ? Help  Q Quit  ' + $status) -Width $Width
+    $foot = ConvertTo-DisplayText -Text (' Enter Actions  M Menu  Space Sel  / Search  V Validate  P Preview  ? Help  Q Quit  ' + $status) -Width $Width
     Add-FrameLine -Sb $sb -Row $Height -Content ($t.FootBg + (Format-KeyHint -Text $foot))
 
     return $sb.ToString()

@@ -32,6 +32,7 @@ function Invoke-TuiSettings {
     # (DeliverAndStore) are left untouched.
     foreach ($row in $script:UI.Items) {
         $row.WillForwardTo = if ($row.ForwardingPrefix) { "$($row.ForwardingPrefix)@$($script:Config.ForwardingDomain)" } else { '' }
+        $row | Add-Member -NotePropertyName TargetCheck -NotePropertyValue '' -Force
     }
     Update-MailboxView -State $script:UI
     $script:UI.Dirty = $true
@@ -80,6 +81,32 @@ function Invoke-TuiApply {
     $script:UI.Dirty = $true
 }
 
+function Invoke-TuiValidate {
+    if ((Get-TuiSelectedCount) -eq 0) { $script:UI.Status = 'No mailboxes selected.'; $script:UI.Dirty = $true; return }
+    [void](Write-DialogFrame -Title 'Validating targets' -BodyLines @('', 'Preflight: resolving MX and testing outbound TCP 25...') -FooterHint 'Working...')
+    try {
+        $r = Invoke-TargetValidation -Rows @($script:UI.Items) -OnProgress {
+            param($i, $t, $m)
+            Show-OperationProgress -Progress @{ Index = $i; Total = $t; Mailbox = $m; Title = "Validating targets $i/$t" }
+        }
+    } catch {
+        Clear-DialogKeyQueue
+        Show-ReportDialog -Title 'Validation failed' -Lines @($_.Exception.Message)
+        $script:UI.Dirty = $true
+        return
+    }
+    Clear-DialogKeyQueue
+    Update-MailboxView -State $script:UI
+    if ($r.Aborted) {
+        Show-ReportDialog -Title 'Validation not run - selection unchanged' -Lines $r.Messages
+    } else {
+        $lines = @("Kept (250 OK): $($r.Kept)", "Deselected - already forwarding: $($r.AlreadyForwarded)",
+            "Deselected - rejected: $($r.Rejected)", "Deselected - errors: $($r.Errors)") + @($r.Details)
+        Show-ReportDialog -Title 'Validation results' -Lines $lines
+    }
+    $script:UI.Dirty = $true
+}
+
 function Get-TuiSelectedCount { @($script:UI.Items | Where-Object Selected).Count }
 
 function Invoke-TuiAction {
@@ -122,12 +149,14 @@ function Invoke-TuiAction {
         'Refresh'  { Invoke-TuiRefresh }
         'Settings' { Invoke-TuiSettings }
         'Apply'    { Invoke-TuiApply }
+        'Validate' { Invoke-TuiValidate }
         'Help' {
             Show-ReportDialog -Title 'Help' -Lines @(
                 'Enter  action menu for the highlighted mailbox', 'M  global actions menu',
                 'Up/Down/PgUp/PgDn/Home/End  move cursor', 'Space  select/toggle & advance',
                 'A  select all shown   N  clear selection', '/  live search (Enter keep, Esc clear)',
                 'F  cycle filter   R  refresh   S  settings', 'P  preview & apply (explicit Y to confirm)',
+                'V  validate selected targets via SMTP (deselects forwarded/rejected)',
                 'Colors: blue = focus, cyan = selected, yellow = key, amber = will change, red = warning, green = keep copy',
                 'Q or Ctrl+C  quit')
         }
@@ -159,6 +188,7 @@ function Invoke-TuiGlobalMenu {
         @{ Key = 'F'; Label = "Filter: $($script:UI.Filter) (cycle)"; Action = 'CycleFilter' },
         @{ Key = '/'; Label = 'Search'; Action = 'Search' },
         @{ Sep = $true },
+        @{ Key = 'V'; Label = "Validate selected targets ($n)"; Action = 'Validate'; Disabled = ($n -eq 0) },
         @{ Key = 'P'; Label = "Preview & apply selected ($n)"; Action = 'Apply'; Disabled = ($n -eq 0) },
         @{ Key = 'R'; Label = 'Refresh mailboxes'; Action = 'Refresh' },
         @{ Key = 'S'; Label = 'Settings...'; Action = 'Settings' },
@@ -270,6 +300,7 @@ function Invoke-TuiKey {
         'R' { Invoke-TuiAction -Name 'Refresh'; return }
         'S' { Invoke-TuiAction -Name 'Settings'; return }
         'P' { Invoke-TuiAction -Name 'Apply'; return }
+        'V' { Invoke-TuiAction -Name 'Validate'; return }
         'M' { Invoke-TuiGlobalMenu; return }
         '?' { Invoke-TuiAction -Name 'Help'; return }
         'Q' { Invoke-TuiAction -Name 'Quit'; return }
