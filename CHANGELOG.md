@@ -6,6 +6,19 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.3.1-rc.3] - 2026-10-01
+
+- Change: mailboxes with a recipient forward (`ForwardingAddress`, Warn=Y)
+  now show `(recipient) <address>` in the Current forwarding column instead
+  of an empty cell. Targets are resolved with `Get-Recipient` once per
+  distinct value on refresh; unresolvable ones show the raw identity.
+- Change: the No forward filter excludes recipient-forward mailboxes and
+  Has forward includes them, so filter → select all → validate no longer
+  picks them up.
+- Change: validation reports recipient forwards separately ("Warn:
+  recipient forward (ForwardingAddress) set", with target) from existing
+  SMTP forwards.
+
 ## [1.3.1-rc.2] - 2026-10-01
 
 - Fix: validating hundreds of rows deselected whole batches when Exchange
@@ -272,7 +285,8 @@ Initial release.
   CHANGELOG - no source-repo bloat - and attaches it to the GitHub
   release with the matching changelog section as notes.
 
-[Unreleased]: https://github.com/mardahl/EXO-mailforwardManager/compare/v1.3.1-rc.2...HEAD
+[Unreleased]: https://github.com/mardahl/EXO-mailforwardManager/compare/v1.3.1-rc.3...HEAD
+[1.3.1-rc.3]: https://github.com/mardahl/EXO-mailforwardManager/compare/v1.3.1-rc.2...v1.3.1-rc.3
 [1.3.1-rc.2]: https://github.com/mardahl/EXO-mailforwardManager/compare/v1.3.1-rc.1...v1.3.1-rc.2
 [1.3.1-rc.1]: https://github.com/mardahl/EXO-mailforwardManager/compare/v1.3.0...v1.3.1-rc.1
 [1.3.0]: https://github.com/mardahl/EXO-mailforwardManager/compare/v1.2.1...v1.3.0
