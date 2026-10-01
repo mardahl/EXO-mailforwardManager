@@ -30,20 +30,12 @@ $script:UI = @{
     Searching      = $false
 }
 
-# Glyphs (Unicode with ASCII fallback via -Ascii / tests' TestSupport.ps1).
-# [char] codes instead of literal Unicode source characters, matching
+# Glyphs. [char] codes instead of literal Unicode source characters, matching
 # SOAconverter's src/00-globals.ps1 convention.
-if ($script:StartupOptions -and $script:StartupOptions.Ascii) {
-    $script:G = @{
-        H = '-'; V = '|'; Ell = '..'; ChkOn = '[x]'; ChkOff = '[ ]'; Arrow = '->'
-        TL = '+'; TR = '+'; BL = '+'; BR = '+'; Bar = '#'
-    }
-} else {
-    $script:G = @{
-        H = ([char]0x2500); V = ([char]0x2502); Ell = ([char]0x2026)
-        ChkOn = ('[' + [char]0x25A0 + ']'); ChkOff = '[ ]'; Arrow = ([char]0x2192)
-        TL = ([char]0x250C); TR = ([char]0x2510); BL = ([char]0x2514); BR = ([char]0x2518); Bar = ([char]0x2588)
-    }
+$script:G = @{
+    H = ([char]0x2500); V = ([char]0x2502); Ell = ([char]0x2026)
+    ChkOn = ('[' + [char]0x25A0 + ']'); ChkOff = '[ ]'; Arrow = ([char]0x2192)
+    TL = ([char]0x250C); TR = ([char]0x2510); BL = ([char]0x2514); BR = ([char]0x2518); Bar = ([char]0x2588)
 }
 
 # Theme (256-color SGR sequences), adapted from SOAconverter's src/00-globals.ps1.
@@ -81,4 +73,6 @@ $script:T = @{
     KeepOn         = "$e[38;5;42m"
     WarnFlag       = "$e[1;38;5;196;48;5;52m"
     HotKey         = "$e[1;38;5;220m"
+    SearchHi       = "$e[0;38;5;16;48;5;226m"
+    SearchCaret    = "$e[5;38;5;226;48;5;16m"
 }

@@ -68,7 +68,6 @@ This tool puts a terminal UI over `Set-Mailbox -ForwardingSmtpAddress`: the mail
 - **Changelog CSV per run** with timestamp, mailbox, old forward, new forward, deliver-and-store flag, result, error
 - **Settings dialog** for target domain, service-account UPN, cache TTL, deliver-and-store default - persists to `config.json`
 - **`-SelfTest` switch** - validates config and EXO connectivity, touches no mailboxes
-- **`-Ascii` switch** - plain ASCII box-drawing/glyphs for terminals without Unicode/256-color support
 
 ## Quick start
 

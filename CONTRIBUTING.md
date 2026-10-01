@@ -59,7 +59,6 @@ PowerShell script split by responsibility:
 Install-Module ExchangeOnlineManagement -Scope CurrentUser
 .\MailboxForwardingTool.ps1 -SelfTest   # validates config + connectivity, no TUI
 .\MailboxForwardingTool.ps1             # launches the terminal UI
-.\MailboxForwardingTool.ps1 -Ascii      # plain ASCII glyphs (no Unicode/256-color)
 ```
 
 A test tenant with a handful of user mailboxes, some with existing

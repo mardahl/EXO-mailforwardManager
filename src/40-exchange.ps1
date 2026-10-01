@@ -81,7 +81,6 @@ function Connect-Exo {
                 Write-Warning "WAM sign-in failed; restarting with broker auth disabled (-DisableWAM)."
                 $argList = @('-Sta','-NoProfile','-ExecutionPolicy','Bypass','-File',"`"$script:EntryScriptPath`"",'-DisableWAM')
                 if ($script:StartupOptions.SelfTest) { $argList += '-SelfTest' }
-                if ($script:StartupOptions.Ascii)    { $argList += '-Ascii' }
                 $p = Start-Process -FilePath 'powershell.exe' -ArgumentList $argList -Wait -PassThru
                 exit $p.ExitCode
             }

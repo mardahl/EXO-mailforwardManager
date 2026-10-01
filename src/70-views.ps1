@@ -58,7 +58,19 @@ function Get-MailboxFrame {
     $h2b = "Selected: $($counts.Total) ($($counts.Hidden) hidden)"
     $h2c = "  Search: '$($State.Search)'  Filter: $($State.Filter)"
     $rest = [Math]::Max(0, $Width - $h2a.Length - $h2b.Length)
-    Add-FrameLine -Sb $sb -Row 2 -Content ($t.HeaderTxt + $h2a + $t.HeaderBg + $selStyle + $h2b + $t.HeaderTxt + (ConvertTo-DisplayText -Text $h2c -Width $rest))
+    if ($State.Searching) {
+        # Active search: yellow input field, black text, blinking block caret.
+        $label = '  SEARCH: '
+        $tail = "  Filter: $($State.Filter)"
+        $fieldW = [Math]::Max(1, $rest - $label.Length - $tail.Length - 1)
+        $q = [string]$State.Search
+        if ($q.Length -gt $fieldW - 2) { $q = $q.Substring($q.Length - ($fieldW - 2)) }
+        $field = $t.SearchHi + ' ' + $q + $t.SearchCaret + $script:G.Bar + $t.SearchHi + (' ' * [Math]::Max(0, $fieldW - $q.Length - 2))
+        $h2cOut = $t.HeaderHi + $label + $field + $t.HeaderTxt + (ConvertTo-DisplayText -Text $tail -Width ([Math]::Max(0, $rest - $label.Length - $fieldW)))
+    } else {
+        $h2cOut = ConvertTo-DisplayText -Text $h2c -Width $rest
+    }
+    Add-FrameLine -Sb $sb -Row 2 -Content ($t.HeaderTxt + $h2a + $t.HeaderBg + $selStyle + $h2b + $t.HeaderTxt + $h2cOut)
 
     # Row 3: column heading.
     $layout = Get-TableLayout -Width $Width

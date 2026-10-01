@@ -3,14 +3,12 @@
     Justification = 'Bound via $PSBoundParameters at script scope; analyzer cannot see usage inside Main when dot-sourced.')]
 [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSReviewUnusedParameter', 'DisableWAM',
     Justification = 'Read inside Connect-Exo; analyzer cannot see usage when dot-sourced.')]
-[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSReviewUnusedParameter', 'Ascii',
-    Justification = 'Read inside src/00-state.ps1; analyzer cannot see usage when dot-sourced.')]
 [CmdletBinding()]
-param([switch]$SelfTest, [switch]$DisableWAM, [switch]$Ascii)
+param([switch]$SelfTest, [switch]$DisableWAM)
 
 $script:EntryScriptPath = $PSCommandPath
 $script:ScriptDir = $PSScriptRoot
-$script:StartupOptions = @{ SelfTest = [bool]$SelfTest; DisableWAM = [bool]$DisableWAM; Ascii = [bool]$Ascii }
+$script:StartupOptions = @{ SelfTest = [bool]$SelfTest; DisableWAM = [bool]$DisableWAM }
 # scripts/Build-Release.ps1 replaces everything between these two marker
 # lines with the sorted contents of src/*.ps1, inlined in place, for the
 # standalone release bundle. Keep both markers on their own line, verbatim.
@@ -34,7 +32,6 @@ if ($script:IsWin -and [Threading.Thread]::CurrentThread.GetApartmentState() -ne
     $argList = @('-Sta','-NoProfile','-ExecutionPolicy','Bypass','-File',"`"$script:EntryScriptPath`"")
     if ($script:StartupOptions.SelfTest)   { $argList += '-SelfTest' }
     if ($script:StartupOptions.DisableWAM) { $argList += '-DisableWAM' }
-    if ($script:StartupOptions.Ascii)      { $argList += '-Ascii' }
     $p = Start-Process -FilePath 'powershell.exe' -ArgumentList $argList -Wait -PassThru
     exit $p.ExitCode
 }

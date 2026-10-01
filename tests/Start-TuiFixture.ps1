@@ -13,7 +13,6 @@
 # logic entirely.
 [CmdletBinding()]
 param(
-    [switch]$Ascii,
     # Defaults to a fresh directory under the OS temp path so config.json/
     # cache.json/changelog CSVs never touch the real checkout or collide
     # with a previous run. Override only to inspect artifacts afterward.
@@ -38,7 +37,7 @@ New-Item -ItemType Directory -Path $ArtifactDir -Force | Out-Null
 # run writes lands there, never in the real checkout.
 $script:EntryScriptPath = Join-Path $script:FixtureSrcRoot 'MailboxForwardingTool.ps1'
 $script:ScriptDir = $ArtifactDir
-$script:StartupOptions = @{ SelfTest = $false; DisableWAM = $false; Ascii = [bool]$Ascii }
+$script:StartupOptions = @{ SelfTest = $false; DisableWAM = $false }
 
 foreach ($source in (Get-ChildItem (Join-Path $script:FixtureSrcRoot 'src') -Filter '*.ps1' | Sort-Object Name)) {
     . $source.FullName

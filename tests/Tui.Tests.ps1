@@ -375,6 +375,16 @@ Test-Case 'Escape while searching clears the query and exits search mode' {
     Assert ($script:UI.Search -eq '') 'Escape must clear the search query.'
 }
 
+Test-Case 'Active search renders yellow input with blinking caret' {
+    New-DispatchState 3 | Out-Null
+    $script:UI.Searching = $true; $script:UI.Search = 'bob'
+    $frame = Get-MailboxFrame -State $script:UI -Width 100 -Height 20
+    Assert $frame.Contains($script:T.SearchHi + ' bob' + $script:T.SearchCaret) 'Search mode must show yellow field and blinking caret.'
+    $script:UI.Searching = $false
+    $frame = Get-MailboxFrame -State $script:UI -Width 100 -Height 20
+    Assert (-not $frame.Contains($script:T.SearchCaret)) 'Caret must vanish outside search mode.'
+}
+
 Test-Case 'F cycles the filter and A/N select/clear the visible set' {
     $items = New-DispatchState 3
     Assert ($script:UI.Filter -eq 'All') 'Filter must start at All.'
@@ -985,13 +995,12 @@ Test-Case 'Show-MailboxDialog highlights the focused field and the Save button d
     function Clear-DialogKeyQueue { }
     $out = Capture-Console { Show-MailboxDialog -Row $row -Domain 'archive.example.com' | Out-Null }
     $frames = $out -split [regex]::Escape($script:T.Border + [string]$script:G.TL)
-    # In ASCII mode, $script:G.TL -eq $script:G.BL -eq '+', so Border+TL matches at both
-    # the top-left and bottom-left box corners (2 matches per paint).
-    # frames[1] = first paint body (focus Prefix), frames[5] = third paint body (focus Save)
+    # Border+TL matches once per paint (top-left corner).
+    # frames[1] = first paint body (focus Prefix), frames[3] = third paint body (focus Save)
     Assert ($frames[1].Contains($script:T.FocusBg + '  Prefix:')) 'First paint must paint the Prefix line in FocusBg.'
     Assert ($frames[1].Contains($script:T.Button + '  [ Save ]')) 'Save is an idle Button when not focused.'
-    Assert ($frames[5].Contains($script:T.ButtonHot + '  [ Save ]')) 'Save becomes ButtonHot when focused.'
-    Assert (-not $frames[5].Contains($script:T.FocusBg + '  Prefix:')) 'Prefix loses focus style when Save is focused.'
+    Assert ($frames[3].Contains($script:T.ButtonHot + '  [ Save ]')) 'Save becomes ButtonHot when focused.'
+    Assert (-not $frames[3].Contains($script:T.FocusBg + '  Prefix:')) 'Prefix loses focus style when Save is focused.'
 }
 
 Test-Case 'Show-SettingsDialog paints validation errors in Danger style' {
